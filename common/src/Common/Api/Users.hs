@@ -17,7 +17,7 @@ import           Common.Api.User.Account      as User  (Account(Account))
 import           Common.Api.Users.Credentials as Users (Credentials(Credentials))
 import           Common.Api.Users.Registrant  as Users (Registrant(Registrant))
 
-type UsersApi token =
+type UsersApi =
   ( "login"
     :> ReqBody '[JSON] (Namespace "user" Credentials)
     :> Post '[JSON] (Namespace "user" Account)

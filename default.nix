@@ -15,11 +15,15 @@
   }
 }:
 with obelisk;
-project ./. ({ hackGet, ... }: {
+project ./. ({ pkgs, hackGet, ... }: {
   android.applicationId = "systems.obsidian.obelisk.examples.minimal";
   android.displayName = "Obelisk Minimal Example";
   ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
   ios.bundleName = "Obelisk Minimal Example";
+  overrides = with pkgs.haskell.lib; (self: super: {
+    servant-snap = dontCheck ((import ./dep/servant-snap) self super);
+    scrypt = dontCheck super.scrypt;
+  });
   packages = {
     obelisk-oauth-backend = hackGet ./dep/obelisk-oauth + /backend;
     obelisk-oauth-common = hackGet ./dep/obelisk-oauth + /common;

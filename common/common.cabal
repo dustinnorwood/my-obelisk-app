@@ -7,9 +7,10 @@ library
   hs-source-dirs: src
   build-depends: base
                , aeson
+               , casing
+               , mtl
                , obelisk-oauth-common
                , obelisk-route
-               , mtl
                , servant
                , text
   exposed-modules:

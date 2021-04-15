@@ -26,6 +26,7 @@ data BackendRoute :: * -> * where
   BackendRoute_Missing :: BackendRoute ()
   BackendRoute_Api :: BackendRoute PageName
   BackendRoute_OAuth :: BackendRoute (R OAuth)
+  BackendRoute_GetSearchExamples :: BackendRoute ()
 
 data FrontendRoute :: * -> * where
   FrontendRoute_Main :: FrontendRoute ()
@@ -39,6 +40,7 @@ fullRouteEncoder = mkFullRouteEncoder
       BackendRoute_Missing -> PathSegment "missing" $ unitEncoder mempty
       BackendRoute_Api     -> PathSegment "api" $ id
       BackendRoute_OAuth   -> PathSegment "oauth" oauthRouteEncoder
+      BackendRoute_GetSearchExamples -> PathSegment "get-search-examples" $ unitEncoder mempty
   )
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty
