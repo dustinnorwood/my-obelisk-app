@@ -1,15 +1,17 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds, FlexibleContexts, FlexibleInstances, GADTs, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms, RankNTypes #-}
+{-# LANGUAGE RecursiveDo, ScopedTypeVariables, TypeApplications                                #-}
 
 module Frontend where
+
+import Control.Lens
+import Reflex.Dom.Core hiding (Namespace)
+
+import Control.Monad.Trans.Reader (mapReaderT)
+import Data.List.NonEmpty         (NonEmpty)
+import Data.Monoid                (appEndo)
+import Obelisk.Frontend           (Frontend (Frontend), ObeliskWidget)
+import Obelisk.Route.Frontend     (pattern (:/), R, RouteToUrl, RoutedT, SetRoute, mapRoutedT, subRoute_)
 
 import Common.Route
 import Common.Facebook.Types.Auth
@@ -18,7 +20,6 @@ import Control.Monad
 import Data.Functor.Identity (Identity)
 import Data.Semigroup ((<>))
 import Data.Text (Text)
-import Frontend.Util
 import GHCJS.DOM (currentWindowUnchecked)
 import GHCJS.DOM.Element (scrollIntoView)
 import GHCJS.DOM.Window (scrollTo)
@@ -26,6 +27,22 @@ import Obelisk.Frontend
 import Obelisk.Generated.Static
 import Obelisk.Route.Frontend
 import Reflex.Dom.Core
+
+
+import           Common.Api.Namespace            (unNamespace)
+import qualified Common.Api.User.Account         as Account
+import           Common.Route                    (FrontendRoute (..))
+import qualified Frontend.Client                 as Client
+import           Frontend.FrontendStateT
+import           Frontend.Head                   (htmlHead)
+import           Frontend.HomePage               (homePage)
+import           Frontend.Login                  (login)
+import           Frontend.Nav                    (nav)
+import           Frontend.Package                (package)
+import           Frontend.Profile                (profile)
+import           Frontend.Register               (register)
+import           Frontend.Settings               (settings)
+import           Frontend.Utils                  (pathSegmentSubRoute, routeLinkClass)
 
 getSearchExamples ::
   (MonadHold t m, PostBuild t m, Prerender js t m) =>
@@ -37,62 +54,71 @@ getSearchExamples = do
   where
     Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
 
-
--- This runs in a monad that can be run on the client or the server.
--- To run code in a pure client or pure server context, use one of the
--- `prerender` functions.
-frontend :: Frontend (R FrontendRoute)
-frontend = Frontend
-  { _frontend_head = do
-      el "title" $ text "Obelisk Minimal Example"
-      elAttr "link" ("href" =: static @"main.css" <> "type" =: "text/css" <> "rel" =: "stylesheet") blank
-  , _frontend_body = do
-      divClass "ui container" $ mdo
-        divClass ("ui top attached inverted segment " <> themeColor)
-          $ routeLink (FrontendRoute_Main :/ ())
-          $ elClass "h1" "ui inverted header"
-          $ text "Vaycon - Click your way to the weekend"
-        highlightE :: Event t (Maybe (Element EventResult GhcjsDomSpace t)) <-
-          fmap switchDyn $ prerender (pure never)
-            $ delay 0.2
-            $ updated highlight -- Delay until DOM is ready.
-        void $ prerender blank $ widgetHold_ blank $ ffor highlightE $ \case
-          Nothing ->
-            currentWindowUnchecked >>= \w -> scrollTo w 0 0
-          Just e ->
-            scrollIntoView (_element_raw e) True
-        highlight :: Dynamic t (Maybe (Element EventResult GhcjsDomSpace t)) <- divClass "ui attached segment" $ do
-          fmap join $ subRoute $ \case
-            FrontendRoute_Main -> do
-              resp <- getSearchExamples
-              widgetHold_ loader $ ffor resp $ \case
-                Nothing -> text "Unable to load search examples"
-                Just (Left na) -> notAuthorizedWidget na
-                Just (Right (_, examples)) -> do
-                  elHeader "h2" (text "Search examples") $
-                    text "Begin browsing the archive using these search queries!"
-                  divClass "ui two column centered grid" $ divClass "column"
-                    $ divClass "ui list"
-                    $ forM_ examples
-                    $ \(title, query) -> do
-                      divClass "item" $ divClass "ui piled segment" $ do
-                        divClass "description" $ text title
-                  el "p" blank
-              pure $ constDyn Nothing
-        divClass "ui bottom attached secondary segment" $ do
-          elAttr "a" ("href" =: "https://github.com/srid/Taut") $ text "Powered by Haskell"
-    }
+notAuthorizedWidget :: DomBuilder t m => NotAuthorized -> m ()
+notAuthorizedWidget = \case
+  NotAuthorized_RequireLogin grantHref -> divClass "ui segment" $ do
+    el "p" $ text "You must login to Facebook to access this page."
+    fbLoginButton grantHref
   where
-    loader :: DomBuilder t m => m ()
-    loader = divClass "ui loading segment" blank
-    notAuthorizedWidget :: DomBuilder t m => NotAuthorized -> m ()
-    notAuthorizedWidget = \case
-      NotAuthorized_RequireLogin grantHref -> divClass "ui segment" $ do
-        el "p" $ text "You must login to Facebook to access this page."
-        fbLoginButton grantHref
-      where
-        fbLoginButton r =
-          elAttr "a" ("href" =: r) $
-            elAttr "img" ("src" =: static @"fb.png"
-                       <> "width" =: "400"
-                         ) $ blank
+    fbLoginButton r =
+      elAttr "a" ("href" =: r) $
+        elAttr "img" ("src" =: static @"fb.png"
+                   <> "width" =: "400"
+                     ) $ blank
+
+type RoutedAppState t m = RoutedT t (R FrontendRoute) (AppState t m)
+
+type AppState t m
+  = EventWriterT t
+    (NonEmpty FrontendEvent)
+    (FrontendStateT t FrontendData m)
+
+ 
+htmlBody
+  :: forall t js m
+  . ( ObeliskWidget js t (R FrontendRoute) m
+    )
+  => RoutedT t (R FrontendRoute) m ()
+htmlBody = mapRoutedT unravelAppState $ do
+  nav
+  elAttr "main" ("role"=:"main"<>"class"=:"container") $ subRoute_ pages
+  footer
+  where
+    unravelAppState :: AppState t m () -> m ()
+    unravelAppState m = mdo
+      lsDyn <- foldDyn appEndo initialFrontendData (foldMap updateFrontendData <$> sE)
+      sE <- flip runFrontendStateT lsDyn $ do
+        (_, sInnerE) <- runEventWriterT m
+        pure sInnerE
+      pure ()
+
+    pages 
+      :: FrontendRoute a
+      -> RoutedT t a
+         (EventWriterT t
+           (NonEmpty FrontendEvent)
+           (FrontendStateT t FrontendData m))
+          ()
+    pages r = case r of
+      FrontendRoute_Home     -> homePage
+      FrontendRoute_Login    -> login
+      FrontendRoute_Register -> register
+      FrontendRoute_Package  -> package
+      FrontendRoute_Settings -> settings
+      FrontendRoute_Profile  -> pathSegmentSubRoute profile
+
+footer
+  :: ( DomBuilder t m
+     , PostBuild t m
+     , RouteToUrl (R (FrontendRoute)) m
+     , SetRoute t (R (FrontendRoute)) m
+     , MonadSample t m
+     )
+  => m ()
+footer = elClass "footer" "footer" $ elClass "div" "container" $ do
+  routeLinkClass "logo-font" (FrontendRoute_Home :/ ()) $ text "fojano"
+  elClass "span" "attribution" $ do
+    text "The trillion dollar business opportunity."
+
+frontend :: Frontend (R FrontendRoute)
+frontend = Frontend (prerender_ htmlHead htmlHead) htmlBody

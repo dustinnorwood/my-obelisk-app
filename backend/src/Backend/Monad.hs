@@ -11,7 +11,7 @@ import           Control.Monad                    (when)
 import           Control.Monad.Except             (ExceptT (ExceptT), runExceptT, withExceptT)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
 import           Control.Monad.Reader             (ReaderT, runReaderT)
-import           Crypto.JOSE.JWK                  (JWK)
+-- import           Crypto.JOSE.JWK                  (JWK)
 import           Data.Maybe                       (fromMaybe)
 import           Data.Pool                        (Pool, createPool, withResource)
 import qualified Data.Set                         as Set
@@ -39,7 +39,6 @@ import qualified Common.Api.User.Account           as ApiAccount
 
 data VayconServerEnv = VayconServerEnv
   { _dbPool      :: Pool Connection
-  -- , _jwtSettings :: JWTSettings
   }
 makeLenses ''VayconServerEnv
 
@@ -49,11 +48,6 @@ type VayconServerContext = '[] --CookieSettings, JWTSettings]
 
 runVayconServerM :: VayconServerEnv -> VayconServerM a -> Snap a
 runVayconServerM e = flip runReaderT e
-
--- mkContext :: JWTSettings -> Context VayconServerContext
--- mkContext jwtS = defaultCookieSettings :. jwtS :. EmptyContext
-mkContext :: Context VayconServerContext
-mkContext = EmptyContext
 
 mkEnv :: MonadIO m => Text -> m VayconServerEnv -- JWK -> m VayconServerEnv
 mkEnv dbConnStr = do -- jwk = do

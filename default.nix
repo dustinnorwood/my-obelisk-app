@@ -21,6 +21,7 @@ project ./. ({ pkgs, hackGet, ... }: {
   ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
   ios.bundleName = "Obelisk Minimal Example";
   overrides = with pkgs.haskell.lib; (self: super: {
+    servant-reflex = dontCheck ((import ./dep/servant-reflex) self super);
     servant-snap = dontCheck ((import ./dep/servant-snap) self super);
     scrypt = dontCheck super.scrypt;
   });

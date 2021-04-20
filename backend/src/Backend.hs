@@ -34,14 +34,15 @@ import           Obelisk.OAuth.Authorization     (OAuth (..), RedirectUriParams 
 import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.ExecutableConfig.Lookup
 import           Obelisk.Route                   hiding (decode, encode)
-import "servant-snap" Servant                    (serveSnapWithContext)
+import "servant-snap" Servant                    (serveSnap)
 import           Snap
 
 getYolo :: Text -> IO Text
 getYolo l = do
   configs <- liftIO $ getConfigs
-  let route = fromMaybe (error . T.unpack $ "Please fill in config: config/backend/" <> l) $
-                T.decodeUtf8 <$> M.lookup l configs
+  let l' = "backend/" <> l
+      route = fromMaybe (error . T.unpack $ "Please fill in config: config/backend/" <> l') $
+                T.decodeUtf8 <$> M.lookup l' configs
   pure route
 
 backend :: Backend BackendRoute FrontendRoute
@@ -58,7 +59,6 @@ backend = Backend
              . T.encodeUtf8
              $  jwtKey
       env <- mkEnv pgConnStr -- jwk
-      let context = mkContext --(env ^. jwtSettings)
       liftIO $ putStrLn "About to test the db connection. If ob run dies, check out config/backend/pgConnStr"
       _ <- openVayconDb (T.encodeUtf8 pgConnStr)
 
@@ -71,10 +71,20 @@ backend = Backend
           Nothing -> liftIO $ throwString "Expected to receive the authorization code here"
           Just (RedirectUriParams code mstate) -> do
             handleOAuthCallback cfg code
-            redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Main :/ ()) mstate
-        BackendRoute_Api :/ _  -> runVayconServerM env $ serveSnapWithContext api context server
+            redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) mstate
+        BackendRoute_Api :/ apiR  -> case apiR of
+          ApiRoute_Users :/ _ -> runVayconServerM env $ serveSnap api server
+          ApiRoute_User :/ _ -> do
+            resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) >>= \case
+              Left e -> pure $ Left e
+              Right u -> pure $ Right u
+            writeLBS $ encode resp
+            runVayconServerM env $ serveSnap api server
+          ApiRoute_Packages :/ _ -> runVayconServerM env $ serveSnap api server
+          ApiRoute_Profiles :/ _ -> runVayconServerM env $ serveSnap api server
+          ApiRoute_Tags :/ _ -> runVayconServerM env $ serveSnap api server
         BackendRoute_GetSearchExamples :=> Identity () -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Main :/ ()) >>= \case
+          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) >>= \case
             Left e -> pure $ Left e
             Right u -> do
               -- TODO: This should be generic, and dates determined automatically.
@@ -88,10 +98,5 @@ backend = Backend
                       ("Messages in #random during mid 2016", "after:2016-08-01 before:2016-09-01 in:random")
                     ]
               pure $ Right (u, examples)
-          writeLBS $ encode resp
-        BackendRoute_Api :=> Identity (_, _) -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Main :/ ()) >>= \case
-            Left e -> pure $ Left e
-            Right u -> pure $ Right u
           writeLBS $ encode resp
   }
