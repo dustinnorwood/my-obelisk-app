@@ -16,7 +16,9 @@ import Control.Monad.Trans.Control (MonadTransControl (StT), defaultLiftWith, de
 import Control.Monad.Trans.Reader  (ReaderT, ask, runReaderT)
 import Data.Coerce                 (coerce)
 import Data.Functor                (void)
+import Data.Map.Strict             (Map)
 import Data.Monoid                 (Endo (Endo), First)
+import Data.Text                   (Text)
 import Language.Javascript.JSaddle (MonadJSM)
 import Obelisk.Route.Frontend      (pattern (:/), R, RouteToUrl, RoutedT, SetRoute, askRouteToUrl,
                                     modifyRoute, setRoute)
@@ -27,7 +29,7 @@ import qualified Common.Api.User.Account as Account
 import           Common.Route                    (FrontendRoute (FrontendRoute_Home))
 
 
-data FrontendEvent = LogOut | LogIn Account
+data FrontendEvent = LogOut | LogIn Text
 makeClassyPrisms ''FrontendEvent
 
 data LoadableData e a = Loading | LoadFailed e | Loaded a
@@ -40,14 +42,14 @@ loadableData loading loadFailed loaded = \case
   Loaded     a -> loaded a
 
 data FrontendData = FrontendData
-  { _frontendDataLoggedInAccount :: LoadableData () (Maybe Account)
+  { _frontendDataLoggedInAccount :: LoadableData () (Maybe Text)
   }
 makeClassy ''FrontendData
 
 class HasLoggedInAccount s where
-  loadableLoggedInAccount :: Getter s (LoadableData () (Maybe Account))
+  loadableLoggedInAccount :: Getter s (LoadableData () (Maybe Text))
 
-  loggedInAccount :: Fold s Account
+  loggedInAccount :: Fold s Text
   loggedInAccount = loadableLoggedInAccount . _Loaded . _Just
 
 instance HasLoggedInAccount FrontendData where
@@ -58,11 +60,11 @@ initialFrontendData = FrontendData Loading
 
 updateFrontendData :: FrontendEvent -> Endo FrontendData
 updateFrontendData e = Endo $ case e of
-  LogOut  -> frontendDataLoggedInAccount .~ Loaded Nothing
+  LogOut -> frontendDataLoggedInAccount .~ Loaded Nothing
   LogIn a -> frontendDataLoggedInAccount .~ (Loaded $ Just a)
 
-loggedInToken :: HasLoggedInAccount t => Fold t Token
-loggedInToken = loggedInAccount . to Account.token
+loggedInToken :: HasLoggedInAccount t => Fold t Text
+loggedInToken = loggedInAccount
 
 newtype FrontendStateT t s m a = FrontendStateT
   { unFrontendStateT :: ReaderT (Dynamic t s) m a }
@@ -106,7 +108,7 @@ userWidget
      , DomBuilder t m
      , PostBuild t m
      )
-  => (Account -> m ())
+  => (Text -> m ())
   -> m ()
 userWidget = withUser (redirect (FrontendRoute_Home :/ ()))
 
@@ -118,7 +120,7 @@ withUser
      , PostBuild t m
      )
   => m ()
-  -> (Account -> m ())
+  -> (Text -> m ())
   -> m ()
 withUser noUserW userW = do
   loadingAccountDyn <- viewFrontendState loadableLoggedInAccount

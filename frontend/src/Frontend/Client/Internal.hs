@@ -9,6 +9,7 @@ import Reflex
 
 import Control.Applicative  (liftA2)
 import Data.Proxy           (Proxy (Proxy))
+import Data.Map.Strict      (Map)
 import Data.Text            (Text)
 import Servant.API          ((:<|>) ((:<|>)), (:>), NoContent)
 import Servant.Auth         (Auth, JWT)
@@ -19,7 +20,7 @@ import Servant.Reflex.Multi (ClientMulti, HasClientMulti (..), ReqResult, client
 import Common.Api                        (Api)
 
 import Common.Api.Namespace              (Namespace)
-import Common.Api.Packages.Package       (Package)
+import Common.Api.Packages.Package       (Package, PackageModel)
 import Common.Api.Packages.Packages      (Packages)
 import Common.Api.Packages.Attributes    (CreatePackage)
 import Common.Api.Profiles               (Profile)
@@ -68,7 +69,7 @@ data PackagesClient f t m = PackagesClient
     -> Dynamic t (f [Text])
     -> Dynamic t (f [Text])
     -> Event t ()
-    -> m (Event t (f (ReqResult () Packages)))
+    -> m (Event t (f (ReqResult () (Map Text PackageModel))))
   , _packagesCreate
     :: Dynamic t (f (Either Text (Namespace "package" CreatePackage)))
     -> Event t ()

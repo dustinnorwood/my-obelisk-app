@@ -6,16 +6,21 @@ import Reflex.Dom.Core
 
 import Data.Bool              (bool)
 import Data.Functor           (void)
+import qualified Data.Map.Strict as M
+import Data.Maybe             (fromMaybe)
+import Data.Text              (Text)
 import Obelisk.Route          (pattern (:/), R)
 import Obelisk.Route.Frontend (RouteToUrl, Routed, SetRoute, askRoute)
 
 import qualified Common.Api.User.Account as Account
 import           Common.Route                    (FrontendRoute (..), Username (..))
+import           Frontend.Client                 (urlGET)
 import           Frontend.FrontendStateT
 import           Frontend.Utils                  (routeLinkDynClass)
 
 nav
   :: ( DomBuilder t m
+     , Prerender js t m
      , PostBuild t m
      , MonadHold t m
      , Routed t (R FrontendRoute) m
@@ -61,8 +66,11 @@ nav = do
         text " "
         text "Settings"
       navItem
-        (FrontendRoute_Profile :/ (Username (Account.username a),Nothing))
-        rDyn $ text $ Account.username a
+        (FrontendRoute_Profile :/ (Username "me",Nothing))
+        rDyn $ do
+          fbMap <- urlGET . constDyn $ "https://graph.facebook.com/v10.0/me?fields=short_name&access_token=" <> a
+          shortName <- holdDyn "" $ fromMaybe "Vaycon User" . M.lookup ("short_name" :: Text) . fromMaybe M.empty <$> fbMap
+          dynText shortName
 
     navItem r rDyn = elClass "li" "nav-item" . routeLinkDynClass
       (("nav-link " <>) . bool "" " active" . (== r) <$> rDyn)

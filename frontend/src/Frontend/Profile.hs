@@ -7,6 +7,7 @@ import Reflex.Dom.Core
 import Control.Monad.Fix      (MonadFix)
 import Data.Bool              (bool)
 import Data.Functor           (void)
+import qualified Data.Map.Strict as M
 import Obelisk.Route.Frontend (pattern (:/), R, RouteToUrl, RoutedT, SetRoute, askRoute)
 import Servant.Common.Req     (QParam (QNone))
 
@@ -68,7 +69,7 @@ profile usernameDyn = do
             (constDyn [])
             pbE
 
-          pkgsDyn <- holdDyn (Packages [] 0) loadPkgsSuccessE
+          pkgsDyn <- holdDyn M.empty loadPkgsSuccessE
           packagesPreview pkgsLoadingDyn pkgsDyn
   where
     navItem sr rDyn = elClass "li" "nav-item" . routeLinkDynClass

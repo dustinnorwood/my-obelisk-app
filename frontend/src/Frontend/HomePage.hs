@@ -9,11 +9,12 @@ import           Control.Monad.Fix      (MonadFix)
 import           Data.Functor           (void)
 import           Data.List.NonEmpty     (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty     as NEL
+import qualified Data.Map.Strict        as M
 import           Data.Proxy             (Proxy (Proxy))
 import           Data.Text              (Text)
 import           Obelisk.Route          (R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute)
-import           Servant.Common.Req     (QParam (QNone))
+import           Servant.Common.Req     (QParam (QNone, QParamSome))
 
 import           Common.Api.Namespace         (Namespace (Namespace), unNamespace)
 import           Common.Api.Packages.Packages (Packages (..))
@@ -58,25 +59,12 @@ homePage = elClass "div" "home-page" $ mdo
       el "h1" $ text "Popular"
       (loadPkgsE,_,pkgsLoadingDyn) <- do
         Client.listPackages
-            (constDyn QNone)
+            (constDyn $ QParamSome 4)
             (constDyn QNone)
             (constDyn ["popular"])
             (constDyn [])
             newSelection
-      pkgsDyn <- holdDyn (Packages [] 0) loadPkgsE
-      packagesPreview pkgsLoadingDyn pkgsDyn
-
-  void . elClass "div" "container page" . elClass "div" "row" $ do
-    elClass "div" "col-md-12" $ do
-      el "h1" $ text "Categories"
-      (loadPkgsE,_,pkgsLoadingDyn) <- do
-        Client.listPackages
-            (constDyn QNone)
-            (constDyn QNone)
-            (constDyn ["categories"])
-            (constDyn [])
-            newSelection
-      pkgsDyn <- holdDyn (Packages [] 0) loadPkgsE
+      pkgsDyn <- holdDyn M.empty loadPkgsE
       packagesPreview pkgsLoadingDyn pkgsDyn
 
   void . elClass "div" "container page" . elClass "div" "row" $ do
@@ -84,12 +72,12 @@ homePage = elClass "div" "home-page" $ mdo
       el "h1" $ text "Top Rated"
       (loadPkgsE,_,pkgsLoadingDyn) <- do
         Client.listPackages
-            (constDyn QNone)
+            (constDyn $ QParamSome 4)
             (constDyn QNone)
             (constDyn ["top-rated"])
             (constDyn [])
             newSelection
-      pkgsDyn <- holdDyn (Packages [] 0) loadPkgsE
+      pkgsDyn <- holdDyn M.empty loadPkgsE
       packagesPreview pkgsLoadingDyn pkgsDyn
 
 
@@ -98,11 +86,11 @@ homePage = elClass "div" "home-page" $ mdo
       el "h1" $ text "We think you'll like"
       (loadPkgsE,_,pkgsLoadingDyn) <- do
         Client.listPackages
-            (constDyn QNone)
+            (constDyn $ QParamSome 4)
             (constDyn QNone)
             (constDyn ["we-think-you-will-like"])
             (constDyn [])
             newSelection
-      pkgsDyn <- holdDyn (Packages [] 0) loadPkgsE
+      pkgsDyn <- holdDyn M.empty loadPkgsE
       packagesPreview pkgsLoadingDyn pkgsDyn
   pure ()

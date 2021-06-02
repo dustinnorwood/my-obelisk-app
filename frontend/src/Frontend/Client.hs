@@ -1,13 +1,19 @@
-{-# LANGUAGE DataKinds, FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 module Frontend.Client where
 
 import Control.Lens
 import Reflex
 import Reflex.Dom.Core hiding (Namespace)
 
+import Common.Api.Packages.Package (PackageModel)
 import Control.Monad           (join)
-import Data.Aeson              (decode)
+import Data.Aeson              (decode, FromJSON)
+import Data.Dependent.Sum      (DSum(..))
 import Data.Functor.Identity   (Identity (..))
+import Data.Map.Strict         (Map)
 import Data.Text               (Text)
 import Data.Text.Lazy          (fromStrict)
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -27,7 +33,9 @@ import           Common.Api.User.Update            (UpdateUser)
 import           Common.Api.Users.Credentials      (Credentials)
 import           Common.Api.Users.Registrant       (Registrant)
 import           Common.Api.Validation             (ValidationErrors)
+import           Common.Route
 import           Frontend.Client.Internal
+import           Obelisk.Route                     hiding (decode)
 
 type ClientRes t a = (Event t a, Event t ClientError, Dynamic t Bool)
 
@@ -38,6 +46,21 @@ data ClientError
   | FailedValidation (Maybe (ErrorBody ValidationErrors))
   | OtherError Word Text
   deriving (Show)
+
+urlGET ::
+  (MonadHold t m, PostBuild t m, Prerender js t m, FromJSON b) =>
+  Dynamic t Text -> m (Event t (Maybe b))
+urlGET urlDyn = fmap switchDyn $ prerender (pure never) $ do
+  pb <- getPostBuild
+  getAndDecode $ leftmost [updated urlDyn, tagPromptlyDyn urlDyn pb]
+
+backendGET ::
+  (MonadHold t m, PostBuild t m, Prerender js t m, FromJSON b) =>
+  Dynamic t (DSum BackendRoute Identity) -> m (Event t (Maybe b))
+backendGET routeDyn = urlGET urlDyn
+  where
+    urlDyn = renderBackendRoute enc <$> routeDyn
+    Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
 
 login
   :: (Reflex t, Applicative m, Prerender js t m)
@@ -103,7 +126,7 @@ listPackages
   -> Dynamic t [Text]
   -> Dynamic t [Text]
   -> Event t ()
-  -> m (ClientRes t Packages)
+  -> m (ClientRes t (Map Text PackageModel))
 listPackages limitDyn offsetDyn tagsDyn favoritedsDyn submitE =
   fmap switchClientRes $ prerender (pure emptyClientRes) $ do
     resE <- unIdF $ getClient ^. apiPackages . packagesList

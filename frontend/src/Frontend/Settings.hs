@@ -107,8 +107,8 @@ settings = userWidget $ \acct -> elClass "div" "settings-page" $ do
 
           el "hr" blank
           -- Add a logout button that dispatches a logout event.
-          logoutClick <- buttonClass "btn btn-outline-danger" (constDyn False) $ text "Logout"
-          tellEvent $ pure (_LogOut # ()) <$ logoutClick
-          -- And redirect to home.
-          setRoute $ FrontendRoute_Home :/ () <$ logoutClick
+          -- logoutClick <- buttonClass "btn btn-outline-danger" (constDyn False) $ text "Logout"
+          -- tellEvent $ pure (_LogOut # ()) <$ logoutClick
+          -- -- And redirect to home.
+          -- setRoute $ FrontendRoute_Home :/ () <$ logoutClick
           pure ()

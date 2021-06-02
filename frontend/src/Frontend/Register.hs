@@ -11,6 +11,7 @@ import           Obelisk.Route.Frontend (pattern (:/), R, RouteToUrl, SetRoute, 
 
 import           Common.Api.Namespace        (Namespace (Namespace), unNamespace)
 import           Common.Api.Users.Registrant (Registrant (Registrant))
+import           Common.Api.User.Account
 import           Common.Route                        (FrontendRoute (..))
 import qualified Frontend.Client             as Client
 import           Frontend.FrontendStateT
@@ -64,6 +65,6 @@ register = noUserWidget $ elClass "div" "auth-page" $ do
                 <*> emailI ^. to _inputElement_value
                 <*> passI ^. to _inputElement_value
           (successE,_,_) <- Client.register (pure . Namespace <$> registrant) submitE
-          tellEvent (fmap (pure . (_LogIn #) . unNamespace) $ successE)
+          tellEvent (fmap (pure . (_LogIn #) . getToken . token . unNamespace) $ successE)
           pure ()
   pure ()

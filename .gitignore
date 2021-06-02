@@ -4,8 +4,10 @@
 *.o
 cabal.project.local
 cabal.sandbox.config
-config/backend/oauthClientID
-config/backend/oauthClientSecret
+config/backend/oauthClientID-prod
+config/backend/oauthClientSecret-prod
+config/backend/oauthClientID-test
+config/backend/oauthClientSecret-test
 ctags
 dist-newstyle/
 dist/

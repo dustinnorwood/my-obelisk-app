@@ -38,8 +38,8 @@ readBackendConfig :: MonadIO m => m BackendConfig
 readBackendConfig = do
   configs <- liftIO $ getConfigs
   let route = fromMaybe "" $ decodeUtf8 <$> Map.lookup "common/route" configs
-  let oauthClientID = fromMaybe "" $ T.strip . decodeUtf8 <$> Map.lookup "backend/oauthClientID" configs
-  let oauthClientSecret = fromMaybe "" $ T.strip . decodeUtf8 <$> Map.lookup "backend/oauthClientSecret" configs
+  let oauthClientID = fromMaybe "" $ T.strip . decodeUtf8 <$> Map.lookup "backend/oauthClientID-test" configs
+  let oauthClientSecret = fromMaybe "" $ T.strip . decodeUtf8 <$> Map.lookup "backend/oauthClientSecret-test" configs
   k <- snd <$> liftIO randomKey
   tlsMgr <- liftIO newTlsManager
   pure $ BackendConfig enc k tlsMgr defaultPageSize route oauthClientID oauthClientSecret

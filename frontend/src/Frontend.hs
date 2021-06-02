@@ -32,6 +32,7 @@ import Reflex.Dom.Core
 import           Common.Api.Namespace            (unNamespace)
 import qualified Common.Api.User.Account         as Account
 import           Common.Route                    (FrontendRoute (..))
+import qualified Data.Text as T
 import qualified Frontend.Client                 as Client
 import           Frontend.FrontendStateT
 import           Frontend.Head                   (htmlHead)
@@ -47,24 +48,7 @@ import           Frontend.Utils                  (pathSegmentSubRoute, routeLink
 getSearchExamples ::
   (MonadHold t m, PostBuild t m, Prerender js t m) =>
   m (Event t (Maybe ExamplesResponse))
-getSearchExamples = do
-  fmap switchDyn $ prerender (pure never) $ do
-    pb <- getPostBuild
-    getAndDecode $ (renderBackendRoute enc $ (BackendRoute_GetSearchExamples :/ ())) <$ pb
-  where
-    Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
-
-notAuthorizedWidget :: DomBuilder t m => NotAuthorized -> m ()
-notAuthorizedWidget = \case
-  NotAuthorized_RequireLogin grantHref -> divClass "ui segment" $ do
-    el "p" $ text "You must login to Facebook to access this page."
-    fbLoginButton grantHref
-  where
-    fbLoginButton r =
-      elAttr "a" ("href" =: r) $
-        elAttr "img" ("src" =: static @"fb.png"
-                   <> "width" =: "400"
-                     ) $ blank
+getSearchExamples = Client.backendGET . constDyn $ BackendRoute_GetSearchExamples :/ ()
 
 type RoutedAppState t m = RoutedT t (R FrontendRoute) (AppState t m)
 
@@ -80,6 +64,9 @@ htmlBody
     )
   => RoutedT t (R FrontendRoute) m ()
 htmlBody = mapRoutedT unravelAppState $ do
+  mUser <- Client.backendGET . constDyn $ BackendRoute_Api :/ ApiRoute_User :/ ()
+  tellEvent $ maybe (pure LogOut) (pure . LogIn) <$> mUser
+  mUserDyn <- holdDyn Nothing mUser
   nav
   elAttr "main" ("role"=:"main"<>"class"=:"container") $ subRoute_ pages
   footer
@@ -116,7 +103,7 @@ footer
      )
   => m ()
 footer = elClass "footer" "footer" $ elClass "div" "container" $ do
-  routeLinkClass "logo-font" (FrontendRoute_Home :/ ()) $ text "fojano"
+  routeLinkClass "logo-font" (FrontendRoute_Home :/ ()) $ text "Vaycon"
   elClass "span" "attribution" $ do
     text "The trillion dollar business opportunity."
 

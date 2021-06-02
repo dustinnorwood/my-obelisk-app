@@ -27,13 +27,18 @@ data FBUser = FBUser
   deriving (Eq, Show, Generic)
 
 data NotAuthorized
-  = NotAuthorized_RequireLogin Text
+  = NotAuthorized_RequireLogin Text Text
   deriving (Eq, Show, Generic)
 
 -- | Extract the slack login link out of NotAuthorized
-notAuthorizedLoginLink :: NotAuthorized -> Text
-notAuthorizedLoginLink = \case
-  NotAuthorized_RequireLogin l -> l
+notAuthorizedFBLoginLink :: NotAuthorized -> Text
+notAuthorizedFBLoginLink = \case
+  NotAuthorized_RequireLogin fb _ -> fb
+
+-- | Extract the slack login link out of NotAuthorized
+notAuthorizedGoogleLoginLink :: NotAuthorized -> Text
+notAuthorizedGoogleLoginLink = \case
+  NotAuthorized_RequireLogin _ g -> g
 
 -- | FB's OAuth JSON field label modifier
 fieldLabelMod :: Options

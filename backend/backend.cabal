@@ -18,6 +18,7 @@ library
                , jose
                , http-client-tls
                , lens
+               , monad-alter
                , mtl
                , obelisk-backend
                , obelisk-oauth-backend

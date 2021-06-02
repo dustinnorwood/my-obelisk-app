@@ -9,7 +9,9 @@ module Backend.Database.Packages.Package
 
 import Prelude hiding (id)
  
+import Data.Aeson
 import Data.Int      (Int32)
+import Data.Set      (Set)
 import Data.Text     (Text)
 import Data.Time     (UTCTime)
 import Database.Beam (Beamable, Columnar, Identity, PrimaryKey, Table (..))

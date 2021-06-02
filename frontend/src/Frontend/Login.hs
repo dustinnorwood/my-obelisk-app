@@ -1,20 +1,26 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms #-}
-{-# LANGUAGE RecursiveDo                                                                             #-}
+{-# LANGUAGE GADTs, FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms #-}
+{-# LANGUAGE RecursiveDo, TypeApplications, DataKinds, NoMonomorphismRestriction, ScopedTypeVariables #-}
 module Frontend.Login where
 
 import Control.Lens
 import Reflex.Dom.Core
 
+import           Control.Monad          (join)
 import           Control.Monad.Fix      (MonadFix)
 import           Data.Foldable          (traverse_)
 import           Data.Functor           (void)
 import           Data.List.NonEmpty     (NonEmpty)
 import qualified Data.Map               as Map
+import           Data.Maybe             (fromMaybe)
+import           Data.Text              (Text)
+import qualified Data.Text              as T
+import           Obelisk.Generated.Static
 import           Obelisk.Route.Frontend (pattern (:/), R, RouteToUrl, SetRoute, routeLink)
 
 import           Common.Api.Namespace         (Namespace (Namespace), unNamespace)
 import           Common.Api.Users.Credentials (Credentials (Credentials))
-import           Common.Route                         (FrontendRoute (..))
+import           Common.Api.User.Account
+import           Common.Route
 import qualified Frontend.Client              as Client
 import           Frontend.FrontendStateT
 import           Frontend.Utils                       (buttonClass)
@@ -37,6 +43,11 @@ login = noUserWidget $ elClass "div" "auth-page" $ do
   elClass "div" "container-page" $ do
     elClass "div" "row" $ do
       elClass "div" "col-md-6 offset-md-3 col-xs-12" $ mdo
+        ssoHrefsE <- fmap switchDyn . prerender (pure never) $ do
+          pbE <- getPostBuild
+          mSsoHrefs <- Client.backendGET $ constDyn (BackendRoute_OAuth :/ OAuthProviderRoute_List :/ ())
+          pure $ fromMaybe Map.empty <$> mSsoHrefs
+        ssoHrefs <- holdDyn Map.empty ssoHrefsE
         elClass "h1" "text-xs-center" $ text "Sign in"
 
         -- Put a link here that goes to signup
@@ -48,6 +59,19 @@ login = noUserWidget $ elClass "div" "auth-page" $ do
         elClass "ul" "error-messages" $
           void $ dyn $ ffor errorDyn $ traverse_ $ \_ ->
             el "li" (text "Login Failed")
+
+        let fbHref = fromMaybe "#" . Map.lookup ("Facebook" :: Text) <$> ssoHrefs
+            fbMap = ("href" =:) <$> fbHref
+        elDynAttr "a" fbMap . void $
+          elAttr "img" ("src" =: (static @"fb.png")
+                       <> "width" =: "400"
+                       ) $ blank
+
+        let gHref = ("href" =:) . fromMaybe "#" . Map.lookup "Google" <$> ssoHrefs
+        elDynAttr "a" gHref . void $
+          elAttr "img" ("src" =: (static @"google.png")
+                       <> "width" =: "400"
+                       ) $ blank
 
         -- A form for two inputs
         (submitE, successE, errorE) <- el "form" $ mdo
@@ -80,6 +104,6 @@ login = noUserWidget $ elClass "div" "auth-page" $ do
 
         -- When we have a success fire off, we fire a login up the state tree
         -- This sets the JWT token into our state and local storage
-        tellEvent $ pure . (_LogIn #) . unNamespace <$> successE
+        tellEvent $ pure . (_LogIn #) . getToken . token . unNamespace <$> successE
 
   pure ()

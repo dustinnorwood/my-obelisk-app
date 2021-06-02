@@ -8,6 +8,21 @@ import Data.Text                   (Text)
 import Data.Time                   (UTCTime)
 import GHC.Generics                (Generic)
 
+data PackageModel = PackageModel
+  { packageModelTitle       :: Text
+  , packageModelDescription :: Text
+  , packageModelImage       :: Text
+  , packageModelBody        :: Text
+  , packageModelCreatedAt   :: UTCTime
+  , packageModelUpdatedAt   :: UTCTime
+  , packageModelTags        :: Set Text -- TODO: Tag
+  , packageModelFavorited   :: Set Text -- TODO: UserId
+  } deriving (Eq, Show)
+
+deriving instance Generic PackageModel
+deriving instance ToJSON PackageModel
+deriving instance FromJSON PackageModel
+
 data Package = Package
   { id             :: Int32
   , slug           :: Text

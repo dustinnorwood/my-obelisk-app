@@ -1,5 +1,6 @@
-{-# LANGUAGE DataKinds, DeriveGeneric, FlexibleContexts, GeneralizedNewtypeDeriving, LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses, OverloadedStrings, PackageImports, RankNTypes, TemplateHaskell              #-}
+{-# LANGUAGE DataKinds, DeriveGeneric, FlexibleContexts, GeneralizedNewtypeDeriving, LambdaCase, RecordWildCards #-}
+{-# LANGUAGE MultiParamTypeClasses, OverloadedStrings, PackageImports, RankNTypes, TemplateHaskell, TypeOperators #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module Backend.Monad
   ( module Backend.Monad
 --  , Claim
@@ -7,12 +8,16 @@ module Backend.Monad
 
 import Control.Lens hiding (Context, (??))
 
-import           Control.Monad                    (when)
+import           Control.Monad                    (void, when)
+import           Control.Monad.Change
 import           Control.Monad.Except             (ExceptT (ExceptT), runExceptT, withExceptT)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
-import           Control.Monad.Reader             (ReaderT, runReaderT)
+import           Control.Monad.Reader             (asks, ReaderT, runReaderT)
 -- import           Crypto.JOSE.JWK                  (JWK)
-import           Data.Maybe                       (fromMaybe)
+import           Data.List                        (sortOn)
+import           Data.Map.Strict                  (Map)
+import qualified Data.Map.Strict                  as M
+import           Data.Maybe                       (fromMaybe, maybeToList)
 import           Data.Pool                        (Pool, createPool, withResource)
 import qualified Data.Set                         as Set
 import           Data.Text                        (Text)
@@ -23,6 +28,7 @@ import "servant-snap" Servant                     ((:<|>) ((:<|>)), Context ((:.
 import           Servant.Auth.Server              (CookieSettings,
                                                    JWTSettings, defaultCookieSettings, defaultJWTSettings)
 import           Snap.Core                        (Snap)
+import           Prelude                          hiding (lookup)
 
 
 -- import           Backend.Claim                     (Claim (Claim), deriveToken)
@@ -35,19 +41,58 @@ import qualified Backend.Database.Tags             as DBTags
 import           Backend.Errors
 import           Common.Api                        as Api
 import qualified Common.Api.Packages.Packages      as ApiPackages
+import           Common.Api.Packages.Package       (PackageModel(..))
 import qualified Common.Api.User.Account           as ApiAccount
+import           Common.Route
 
 data VayconServerEnv = VayconServerEnv
   { _dbPool      :: Pool Connection
   }
 makeLenses ''VayconServerEnv
 
+data VayconMemServerEnv = VayconMemServerEnv
+  { _packages      :: Map Text PackageModel
+  }
+makeLenses ''VayconMemServerEnv
+
 type VayconServerM   = ReaderT VayconServerEnv Snap
+type VayconMemServerM = ReaderT VayconMemServerEnv Snap
 type VayconServerDbM = VayconErrorsT (ReaderT Connection IO) --Concrete type for DB queries
 type VayconServerContext = '[] --CookieSettings, JWTSettings]
 
+instance (Lookupable (Map Text PackageModel) GetPackages) VayconMemServerM where
+  lookup (Windowed l o (GetPackagesParams t f)) = do
+    packageList <- M.toList <$> asks _packages
+    let filteredForTags = case t of
+                            Nothing -> packageList 
+                            Just t' -> filter (\(_, PackageModel{..}) -> t' `Set.member` packageModelTags) packageList
+    let filteredForFavs = case f of
+                            Nothing -> filteredForTags 
+                            Just f' -> filter (\(_, PackageModel{..}) -> f' `Set.member` packageModelFavorited) filteredForTags
+    let sorted = reverse $ sortOn (\(_, PackageModel{..}) -> packageModelUpdatedAt) filteredForFavs
+        windowed = take (fromInteger $ fromMaybe 20 l) $ drop (fromInteger $ fromMaybe 0 o) sorted
+    pure $ if null windowed
+             then Nothing
+             else Just $ M.fromList windowed
+
+-- instance (Lookupable (Map Text PackageModel) GetPackages) VayconServerM where
+--   lookup (Windowed l o (GetPackagesParams t f)) = runVayconErrorsT $ do
+--       runDatabase $ do
+--         -- currUserMay <- optionallyLoadAuthorizedUser authRes
+--         let currUserMay = Just dummyUser
+--         ApiPackages.fromList <$>
+--           (DBPackages.all
+--            (primaryKey <$> currUserMay)
+--            (fromMaybe 20 l)
+--            (fromMaybe 0 o)
+--            (Set.fromList $ maybeToList t)
+--            (Set.fromList $ maybeToList f))
+
 runVayconServerM :: VayconServerEnv -> VayconServerM a -> Snap a
 runVayconServerM e = flip runReaderT e
+
+runVayconMemServerM :: VayconMemServerEnv -> VayconMemServerM a -> Snap a
+runVayconMemServerM e = flip runReaderT e
 
 mkEnv :: MonadIO m => Text -> m VayconServerEnv -- JWK -> m VayconServerEnv
 mkEnv dbConnStr = do -- jwk = do
@@ -95,7 +140,7 @@ packagesServer = listPackagesServer
             :<|> packageServer
   where
     listPackagesServer limit offset tags favorited = runVayconErrorsT $ do
-      runDatabase $ do
+      void . runDatabase $ do
         -- currUserMay <- optionallyLoadAuthorizedUser authRes
         let currUserMay = Just dummyUser
         ApiPackages.fromList <$>
@@ -105,6 +150,7 @@ packagesServer = listPackagesServer
            (fromMaybe 0 offset)
            (Set.fromList tags)
            (Set.fromList favorited))
+      pure M.empty
 
     feedServer limit offset = runVayconErrorsT $ do
       runDatabase $ do
