@@ -1,21 +1,25 @@
 {-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms #-}
-{-# LANGUAGE RecursiveDo, TypeFamilies                                                               #-}
+{-# LANGUAGE RecordWildCards, RecursiveDo, TypeFamilies, TupleSections #-}
 module Frontend.Nav where
 
 import Reflex.Dom.Core
 
+import           Control.Monad.Fix      (MonadFix)
 import Data.Bool              (bool)
 import Data.Functor           (void)
 import qualified Data.Map.Strict as M
 import Data.Maybe             (fromMaybe)
 import Data.Text              (Text)
+import Data.Traversable       (for)
 import Obelisk.Route          (pattern (:/), R)
 import Obelisk.Route.Frontend (RouteToUrl, Routed, SetRoute, askRoute, setRoute)
 
 import qualified Common.Api.User.Account as Account
-import           Common.Route                    (homeRoute, FrontendRoute (..), Username (..), Windowed(..), GetPackagesParams(..))
-import           Frontend.Client                 (urlGET)
+import           Common.Api.Packages.Package (PackageModel(..))
+import           Common.Route
+import           Frontend.Client                 (urlGET, backendGET)
 import           Frontend.FrontendStateT
+import           Frontend.PackagePreview
 import           Frontend.Utils                  (routeLinkDynClass)
 
 nav
@@ -23,6 +27,7 @@ nav
      , Prerender js t m
      , PostBuild t m
      , MonadHold t m
+     , MonadFix m
      , Routed t (R FrontendRoute) m
      , RouteToUrl (R FrontendRoute) m
      , SetRoute t (R FrontendRoute) m
@@ -80,19 +85,29 @@ nav = do
 searchWidget
   :: ( DomBuilder t m
      , SetRoute t (R FrontendRoute) m
+     , RouteToUrl (R FrontendRoute) m
+     , MonadHold t m
+     , MonadFix m
+     , PostBuild t m
+     , Prerender js t m
      )
   => m ()
 searchWidget = do
-  divClass "ui fluid action input" $ do
-    -- st <- divClass "ui compact menu search__dropdown" $ do
-    --   divClass "ui simple dropdown item" $ mdo
-    --     elClass "i" "dropdown icon" blank
-    --     (rk, txc) <- divClass "menu" $ do
-    --       (r,_) <- elAttr' "div" ("class" =: "item") $ text "Beef Hunt"
-    --       (t,_) <- elAttr' "div" ("class" =: "item") $ text "Water World"
-    --     return curSearchType
+  divClass "ui fluid action input" $ mdo
     ti <- inputElement $ def
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Search term..." <> "style" =: "border-radius: 0;")
-    setRoute (updated $ (\t -> FrontendRoute_Home :/ (Windowed Nothing Nothing (GetPackagesParams (Just t) Nothing))) <$> value ti)
+    let search = (Windowed Nothing Nothing . SearchPackagesParams) <$> value ti
+    searchResultsE <- backendGET $ (\term -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Search :/ term) <$> search
+    searchResults <- holdDyn M.empty (fromMaybe M.empty <$> searchResultsE)
+    clickedDyn <- divClass "ui compact menu search__dropdown" $ do
+      divClass "ui simple dropdown item" $ mdo
+        elClass "i" "dropdown icon" blank
+        divClass "menu" $ do
+          listWithKey searchResults searchDropDownItem
+    let clickedItem = switchDyn $ leftmost . M.elems <$> clickedDyn
+    setRoute ((\t -> FrontendRoute_Package :/ (DocumentSlug t)) <$> clickedItem)
     return ()
+  where searchDropDownItem slug pkgModelDyn = do
+          (r,_) <- elAttr' "div" ("class" =: "item") $ packagePreviewSmall $ (slug,) <$> pkgModelDyn
+          pure (slug <$ domEvent Click r)

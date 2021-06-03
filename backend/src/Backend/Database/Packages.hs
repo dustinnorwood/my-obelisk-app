@@ -17,7 +17,7 @@ import Prelude hiding (all)
 
 import           Control.Lens                    (view, (^.), _1, _2, _3, _4)
 import           Control.Monad                   (unless)
-import           Control.Monad.Change            hiding (delete, insert, lookup, update)
+import           Control.Monad.FT                hiding (delete, insert, select, update)
 import           Control.Monad.Error.Class       (MonadError, throwError)
 import           Control.Monad.Fail              (MonadFail)
 import           Control.Monad.IO.Class          (MonadIO, liftIO)

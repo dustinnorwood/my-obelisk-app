@@ -1,9 +1,9 @@
 {
   "url": "https://github.com/dustinnorwood/monad-alter.git",
-  "rev": "90e6f0f291959394c5782b436bdc453b4198d96e",
-  "date": "2021-05-29T19:49:22-04:00",
-  "path": "/nix/store/zsy0c6vl2n0ijr9js7yy8qbascchg6h7-monad-alter",
-  "sha256": "156j671gxlcm2h6d5jbdz4x0y8xkxb24mc7pidq6ayqln2cfvzan",
+  "rev": "c19e60465e654b3dd27efc1187c30b6f8eeb03f2",
+  "date": "2021-05-31T14:36:41-04:00",
+  "path": "/nix/store/mw9ar30ix7fsrfn3k6l97mfa7spb2dfr-monad-alter",
+  "sha256": "040frac9xr04z8iqyf2zi78r3n47gxmivp9w93v3j4k533frqxha",
   "fetchSubmodules": false,
   "deepClone": false,
   "leaveDotGit": false

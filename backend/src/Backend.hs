@@ -19,7 +19,7 @@ import           Common.Api.Packages.Package     (PackageModel(..))
 import           Common.Route
 import           Control.Exception.Safe          (throwString)
 import           Control.Lens                    ((^.))
-import           Control.Monad.Change
+import           Control.Monad.FT
 import           Control.Monad.IO.Class          (liftIO)
 import qualified Crypto.JOSE                      as HOSE
 import qualified Crypto.JOSE.Types                as HOSE
@@ -186,8 +186,10 @@ backend = Backend
               Left u -> pure ()
             ApiRoute_Packages :/ packagesR -> case packagesR of
               PackagesRoute_Get :/ w -> do
-                liftIO . putStrLn $ show w
-                pkgs <- fromMaybe M.empty <$> lookup @(M.Map Text PackageModel) w
+                pkgs <- fromMaybe M.empty <$> select @(M.Map Text PackageModel) w
+                writeLBS $ encode pkgs
+              PackagesRoute_Search :/ sp -> do
+                pkgs <- maybe M.empty unPrefixed <$> select @(Prefixed (M.Map Text PackageModel)) sp
                 writeLBS $ encode pkgs
               PackagesRoute_Feed :/ w -> do
                 liftIO . putStrLn $ show w

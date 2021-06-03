@@ -9,7 +9,7 @@ module Backend.Monad
 import Control.Lens hiding (Context, (??))
 
 import           Control.Monad                    (void, when)
-import           Control.Monad.Change
+import           Control.Monad.FT
 import           Control.Monad.Except             (ExceptT (ExceptT), runExceptT, withExceptT)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
 import           Control.Monad.Reader             (asks, ReaderT, runReaderT)
@@ -21,6 +21,7 @@ import           Data.Maybe                       (fromMaybe, maybeToList)
 import           Data.Pool                        (Pool, createPool, withResource)
 import qualified Data.Set                         as Set
 import           Data.Text                        (Text)
+import qualified Data.Text                        as T
 import           Data.Text.Encoding               (encodeUtf8)
 import           Database.Beam                    (primaryKey)
 import           Database.PostgreSQL.Simple       (Connection, close)
@@ -60,8 +61,10 @@ type VayconMemServerM = ReaderT VayconMemServerEnv Snap
 type VayconServerDbM = VayconErrorsT (ReaderT Connection IO) --Concrete type for DB queries
 type VayconServerContext = '[] --CookieSettings, JWTSettings]
 
-instance (Lookupable (Map Text PackageModel) GetPackages) VayconMemServerM where
-  lookup (Windowed l o (GetPackagesParams t f)) = do
+newtype Prefixed a = Prefixed { unPrefixed :: a }
+
+instance Selectable (Map Text PackageModel) GetPackages VayconMemServerM where
+  select (Windowed l o (GetPackagesParams t f)) = do
     packageList <- M.toList <$> asks _packages
     let filteredForTags = case t of
                             Nothing -> packageList 
@@ -74,6 +77,32 @@ instance (Lookupable (Map Text PackageModel) GetPackages) VayconMemServerM where
     pure $ if null windowed
              then Nothing
              else Just $ M.fromList windowed
+
+instance Selectable (Prefixed (Map Text PackageModel)) SearchPackages VayconMemServerM where
+  select (Windowed l o (SearchPackagesParams t)) = do
+    packageList <- asks _packages
+    let filtered = case T.toLower t of
+          "" -> M.empty
+          t' -> 
+            let tags = M.filter (\(PackageModel{..}) ->
+                         not
+                       . null 
+                       . filter (\pmt -> t' `T.isPrefixOf` (T.toLower pmt))
+                       $ Set.toList packageModelTags
+                       ) packageList
+                favs = M.filter (\(PackageModel{..}) -> not
+                                                     . null 
+                                                     . filter (\pmt -> t' `T.isPrefixOf` (T.toLower pmt))
+                                                     $ Set.toList packageModelFavorited
+                                 ) packageList
+                title = M.filter (\(PackageModel{..}) -> t' `T.isPrefixOf` (T.toLower packageModelTitle)
+                                                      ) packageList
+             in M.unions [tags, favs, title]
+    let sorted = reverse $ sortOn (\(_, PackageModel{..}) -> packageModelUpdatedAt) $ M.toList filtered
+        windowed = take (fromInteger $ fromMaybe 20 l) $ drop (fromInteger $ fromMaybe 0 o) sorted
+    pure $ if null windowed
+             then Nothing
+             else Just . Prefixed $ M.fromList windowed
 
 -- instance (Lookupable (Map Text PackageModel) GetPackages) VayconServerM where
 --   lookup (Windowed l o (GetPackagesParams t f)) = runVayconErrorsT $ do

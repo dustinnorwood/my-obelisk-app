@@ -45,6 +45,22 @@ packagesPreview artsLoading artMapDyn = void . dyn . ffor artsLoading $ bool loa
     loading = blankPreview "Loading..."
     blankPreview = elClass "div" "package-preview" . el "em" . text
 
+packagePreviewSmall
+  :: ( DomBuilder t m
+     , PostBuild t m
+     , RouteToUrl (R FrontendRoute) m
+     , SetRoute t (R FrontendRoute) m
+     , MonadSample t m
+     )
+  => Dynamic t (Text, PackageModel) -> m ()
+packagePreviewSmall packageDyn = elClass "div" "package-preview" $ do
+  elClass "div" "package-meta" $ do
+    packageImage "thumbnail" $ packageModelImage . snd <$> packageDyn
+    routeLinkDynClass (constDyn "preview-link")
+      ((\a -> FrontendRoute_Package :/ (DocumentSlug $ fst a)) <$> packageDyn)
+      $ do
+        el "h3" $ dynText $ packageModelTitle . snd <$> packageDyn
+
 packagePreview
   :: ( DomBuilder t m
      , PostBuild t m
@@ -64,7 +80,6 @@ packagePreview packageDyn = elClass "div" "package-preview col-md-3" $ do
       ((\a -> FrontendRoute_Package :/ (DocumentSlug $ fst a)) <$> packageDyn)
       $ do
         el "h3" $ dynText $ packageModelTitle . snd <$> packageDyn
-    elDynAttr "img" (Map.singleton "href" . packageModelImage . snd <$> packageDyn) blank
     el "p" $ dynText $ (<>"...") . T.unwords . take 10 . T.words . packageModelDescription . snd <$> packageDyn
 
 profileRoute
