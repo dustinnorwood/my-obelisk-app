@@ -26,7 +26,7 @@ import Reflex.Host.Class           (MonadReflexCreateTrigger)
 
 import           Common.Api.User.Account (Account, Token)
 import qualified Common.Api.User.Account as Account
-import           Common.Route                    (FrontendRoute (FrontendRoute_Home))
+import           Common.Route                    (homeRoute, FrontendRoute)
 
 
 data FrontendEvent = LogOut | LogIn Text
@@ -99,7 +99,7 @@ noUserWidget
      )
   => m ()
   -> m ()
-noUserWidget w = withUser w (const $ redirect (FrontendRoute_Home :/ ()))
+noUserWidget w = withUser w (const $ redirect homeRoute)
 
 userWidget
   :: ( HasLoggedInAccount s
@@ -110,7 +110,7 @@ userWidget
      )
   => (Text -> m ())
   -> m ()
-userWidget = withUser (redirect (FrontendRoute_Home :/ ()))
+userWidget = withUser (redirect homeRoute)
 
 withUser
   :: ( HasLoggedInAccount s

@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms #-}
-{-# LANGUAGE TypeFamilies                                                                            #-}
+{-# LANGUAGE RecursiveDo, TypeFamilies                                                               #-}
 module Frontend.Nav where
 
 import Reflex.Dom.Core
@@ -10,10 +10,10 @@ import qualified Data.Map.Strict as M
 import Data.Maybe             (fromMaybe)
 import Data.Text              (Text)
 import Obelisk.Route          (pattern (:/), R)
-import Obelisk.Route.Frontend (RouteToUrl, Routed, SetRoute, askRoute)
+import Obelisk.Route.Frontend (RouteToUrl, Routed, SetRoute, askRoute, setRoute)
 
 import qualified Common.Api.User.Account as Account
-import           Common.Route                    (FrontendRoute (..), Username (..))
+import           Common.Route                    (homeRoute, FrontendRoute (..), Username (..), Windowed(..), GetPackagesParams(..))
 import           Frontend.Client                 (urlGET)
 import           Frontend.FrontendStateT
 import           Frontend.Utils                  (routeLinkDynClass)
@@ -34,7 +34,7 @@ nav = do
   rDyn <- askRoute
   loggedIn <- reviewFrontendState loggedInAccount
   el "header" . elClass "nav" "navbar navbar-expand-md navbar-light fixed-top bg-light" $ do
-    routeLinkDynClass "navbar-brand" (constDyn $ FrontendRoute_Home :/ ()) $ text "Vaycon"
+    routeLinkDynClass "navbar-brand" (constDyn $ homeRoute) $ text "Vaycon"
     elAttr "button" ("class"=:"navbar-toggler"
                     <> "type"=:"button"
                     <> "data-toggle"=:"collapse"
@@ -46,10 +46,11 @@ nav = do
         elClass "span" "navbar-toggler-icon" blank
     elAttr "div" ("class" =: "collapse navbar-collapse" <> "id"=:"navbarCollapse") $ do
       elClass "ul" "navbar-nav mr-auto" $ do
-        navItem (FrontendRoute_Home :/ ()) rDyn $ text "Home"
+        navItem homeRoute rDyn $ text "Home"
         void $ widgetHold
           loggedOutMenu
           (maybe loggedOutMenu loggedInMenu <$> updated loggedIn)
+        searchWidget
 
   where
     loggedOutMenu = do
@@ -75,3 +76,23 @@ nav = do
     navItem r rDyn = elClass "li" "nav-item" . routeLinkDynClass
       (("nav-link " <>) . bool "" " active" . (== r) <$> rDyn)
       (constDyn r)
+
+searchWidget
+  :: ( DomBuilder t m
+     , SetRoute t (R FrontendRoute) m
+     )
+  => m ()
+searchWidget = do
+  divClass "ui fluid action input" $ do
+    -- st <- divClass "ui compact menu search__dropdown" $ do
+    --   divClass "ui simple dropdown item" $ mdo
+    --     elClass "i" "dropdown icon" blank
+    --     (rk, txc) <- divClass "menu" $ do
+    --       (r,_) <- elAttr' "div" ("class" =: "item") $ text "Beef Hunt"
+    --       (t,_) <- elAttr' "div" ("class" =: "item") $ text "Water World"
+    --     return curSearchType
+    ti <- inputElement $ def
+      & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
+        ("placeholder" =: "Search term..." <> "style" =: "border-radius: 0;")
+    setRoute (updated $ (\t -> FrontendRoute_Home :/ (Windowed Nothing Nothing (GetPackagesParams (Just t) Nothing))) <$> value ti)
+    return ()

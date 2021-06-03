@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 module Frontend.Client where
@@ -215,7 +216,7 @@ switchHoldThroughClientRes
 switchHoldThroughClientRes res = do
   successE <- switchHold never (view _1 <$> res)
   failureE <- switchHold never (view _2 <$> res)
-  submittingDyn <- fmap join $ holdDyn (constDyn True) (view _3 <$> res)
+  submittingDyn <- fmap join $ holdDyn (constDyn False) (view _3 <$> res)
   pure (successE, failureE, submittingDyn)
 
 unIdF :: (Reflex t, Functor m) => m (Event t (Identity a)) -> m (Event t a)

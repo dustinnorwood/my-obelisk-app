@@ -103,7 +103,7 @@ footer
      )
   => m ()
 footer = elClass "footer" "footer" $ elClass "div" "container" $ do
-  routeLinkClass "logo-font" (FrontendRoute_Home :/ ()) $ text "Vaycon"
+  routeLinkClass "logo-font" homeRoute $ text "Vaycon"
   elClass "span" "attribution" $ do
     text "The trillion dollar business opportunity."
 

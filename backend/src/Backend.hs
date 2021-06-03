@@ -59,7 +59,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "# Things that you will need\n\n- Cake\n- Party Cannon"
             (read "2021-03-27 23:48:45.982494 UTC")
             (read "2021-03-27 23:48:45.982494 UTC")
-            (S.fromList ["we-think-you-will-like"])
+            (S.fromList ["we-think-you-will-like", "today", "price-med"])
             S.empty
           ),
           ("dinos-and-drinks", PackageModel
@@ -69,7 +69,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read "2021-03-27 23:51:44.856755 UTC")
             (read "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["we-think-you-will-like"])
+            (S.fromList ["we-think-you-will-like", "this-weekend", "price-med"])
             S.empty),
           ("animals-of-dallas", PackageModel
             "Animals of Dallas"
@@ -78,7 +78,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read "2021-03-27 23:51:44.856755 UTC")
             (read "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["we-think-you-will-like", "popular"])
+            (S.fromList ["we-think-you-will-like", "popular", "this-weekend", "price-low"])
             S.empty),
           ("beef-hunt", PackageModel
             "Beef Hunt"
@@ -87,7 +87,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["we-think-you-will-like", "popular"])
+            (S.fromList ["we-think-you-will-like", "popular", "today", "price-high"])
             S.empty),
           ("tacos-and-talks", PackageModel 
             "Tacos and Talks"
@@ -96,7 +96,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["top-rated"])
+            (S.fromList ["top-rated", "price-low"])
             S.empty),
           ("zoo-stuff", PackageModel 
             "Zoo Stuff"
@@ -105,7 +105,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["top-rated"])
+            (S.fromList ["top-rated", "today", "this-weekend", "price-med"])
             S.empty),
           ("girls-girls-girls", PackageModel
             "Girls Girls Girls"
@@ -114,7 +114,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["top-rated"])
+            (S.fromList ["top-rated", "price-lambo"])
             S.empty),
           ("water-world", PackageModel
             "Water World"
@@ -123,7 +123,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["top-rated", "popular"])
+            (S.fromList ["top-rated", "popular", "price-high"])
             S.empty),
           ("tipsy-times", PackageModel
             "Tipsy Time"
@@ -132,7 +132,7 @@ runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
             "TODO"
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
-            (S.fromList ["top-rated", "popular"])
+            (S.fromList ["top-rated", "popular", "price-low"])
             S.empty)
           ]
 
@@ -161,22 +161,22 @@ backend = Backend
           writeLBS "404"
         BackendRoute_OAuth :/ oauthProviderR -> case oauthProviderR of
           OAuthProviderRoute_List :=> Identity () -> do
-            let fbLink = mkFBLoginLink cfg . Just $ renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()
-                gLink = mkGoogleLoginLink cfg . Just $ renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()
+            let fbLink = mkFBLoginLink cfg . Just $ renderFrontendRoute (_backendConfig_enc cfg) homeRoute
+                gLink = mkGoogleLoginLink cfg . Just $ renderFrontendRoute (_backendConfig_enc cfg) homeRoute
                 hrefs = M.fromList [("Facebook" :: Text, fbLink), ("Google", gLink)]
             writeLBS $ encode hrefs
           OAuthProviderRoute_FB :=> Identity (OAuth_RedirectUri :=> Identity p) -> case p of
             Nothing -> liftIO $ throwString "Expected to receive the authorization code here"
             Just (RedirectUriParams code mstate) -> do
               handleFBOAuthCallback cfg code
-              redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) mstate
+              redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) mstate
           OAuthProviderRoute_Google :=> Identity (OAuth_RedirectUri :=> Identity p) -> case p of
             Nothing -> liftIO $ throwString "Expected to receive the authorization code here"
             Just (RedirectUriParams code mstate) -> do
               handleGoogleOAuthCallback cfg code
-              redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) mstate
+              redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) mstate
         BackendRoute_Api :/ apiR  -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) >>= \case
+          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) >>= \case
             Left e -> pure $ Left e
             Right u -> pure $ Right u
           runVaycon $ case apiR of
@@ -194,7 +194,7 @@ backend = Backend
             ApiRoute_Profiles :/ _ -> pure ()
             ApiRoute_Tags :/ _ -> pure ()
         BackendRoute_GetSearchExamples :=> Identity () -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) $ FrontendRoute_Home :/ ()) >>= \case
+          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) >>= \case
             Left e -> pure $ Left e
             Right u -> do
               -- TODO: This should be generic, and dates determined automatically.

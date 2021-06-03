@@ -18,7 +18,7 @@ import           Control.Categorical.Bifunctor (bimap)
 import           Control.Category
 import           Control.Lens hiding (bimap)
 import           Control.Monad (join)
-
+import           Data.Dependent.Sum (DSum)
 import           Data.Bifunctor (first)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -86,8 +86,22 @@ data GetPackagesParams = GetPackagesParams
   , _favorited   :: Maybe Text
   } deriving (Eq, Ord, Show)
 
+data SearchPackagesParams = SearchPackagesParams
+  { _search      :: Text
+  } deriving (Eq, Ord, Show)
+
 type GetPackages     = Windowed GetPackagesParams
+type SearchPackages  = Windowed SearchPackagesParams
 type GetPackagesFeed = Windowed ()
+
+emptyGetPackages :: GetPackages
+emptyGetPackages = Windowed Nothing Nothing (GetPackagesParams Nothing Nothing)
+
+emptySearchPackages :: SearchPackages
+emptySearchPackages = Windowed Nothing Nothing (SearchPackagesParams "")
+
+homeRoute :: DSum FrontendRoute Identity
+homeRoute = FrontendRoute_Home :/ emptyGetPackages
 
 getPackagesParamsEncoder :: (Applicative check, Applicative parse) => Encoder check parse GetPackagesParams (Map Text (Maybe Text))
 getPackagesParamsEncoder = unsafeMkEncoder $ EncoderImpl
@@ -97,15 +111,24 @@ getPackagesParamsEncoder = unsafeMkEncoder $ EncoderImpl
 getPackagesEncoder :: Encoder Identity Identity GetPackages (Map Text (Maybe Text))
 getPackagesEncoder = windowedEncoder getPackagesParamsEncoder
 
+searchPackagesParamsEncoder :: (Applicative check, Applicative parse) => Encoder check parse SearchPackagesParams (Map Text (Maybe Text))
+searchPackagesParamsEncoder = unsafeMkEncoder $ EncoderImpl
+  (\m -> pure $ SearchPackagesParams (fromMaybe "" . join $ M.lookup "search" m))
+  (\(SearchPackagesParams s) -> mkQueryList [("search", Just s)])
+
+searchPackagesEncoder :: Encoder Identity Identity SearchPackages (Map Text (Maybe Text))
+searchPackagesEncoder = windowedEncoder searchPackagesParamsEncoder
+
 getPackagesFeedEncoder :: Encoder Identity Identity GetPackagesFeed (Map Text (Maybe Text))
 getPackagesFeedEncoder = windowedEncoder . unsafeMkEncoder $ EncoderImpl (pure . const ()) (const M.empty)
 
 data PackagesRoute :: * -> * where
-  PackagesRoute_Get  :: PackagesRoute GetPackages
-  PackagesRoute_Feed :: PackagesRoute GetPackagesFeed
+  PackagesRoute_Get    :: PackagesRoute GetPackages
+  PackagesRoute_Search :: PackagesRoute SearchPackages
+  PackagesRoute_Feed   :: PackagesRoute GetPackagesFeed
 
 data FrontendRoute :: * -> * where
-  FrontendRoute_Home :: FrontendRoute ()
+  FrontendRoute_Home :: FrontendRoute GetPackages
   FrontendRoute_Login :: FrontendRoute ()
   FrontendRoute_Register :: FrontendRoute ()
   FrontendRoute_Settings :: FrontendRoute ()
@@ -127,7 +150,9 @@ fullRouteEncoder = mkFullRouteEncoder
       BackendRoute_GetSearchExamples -> PathSegment "get-search-examples" $ unitEncoder mempty
   )
   (\case
-      FrontendRoute_Home -> PathEnd $ unitEncoder mempty
+      FrontendRoute_Home -> PathEnd
+                          . hoistParse (pure . runIdentity)
+                          $ hoistCheck (pure . runIdentity) getPackagesEncoder
       FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
       FrontendRoute_Register -> PathSegment "register" $ unitEncoder mempty
       FrontendRoute_Settings -> PathSegment "settings" $ unitEncoder mempty
@@ -152,6 +177,12 @@ packagesRouteEncoder = pathComponentEncoder $ \case
   PackagesRoute_Get -> PathEnd
                      . hoistParse (pure . runIdentity)
                      $ hoistCheck (pure . runIdentity) getPackagesEncoder
+  PackagesRoute_Search -> PathSegment "search"
+                     $ queryOnlyEncoder .
+                     ( hoistParse (pure . runIdentity)
+                     . hoistCheck (pure . runIdentity)
+                     $ searchPackagesEncoder
+                     )
   PackagesRoute_Feed -> PathSegment "feed"
                       $ queryOnlyEncoder .
                       ( hoistParse (pure . runIdentity)
