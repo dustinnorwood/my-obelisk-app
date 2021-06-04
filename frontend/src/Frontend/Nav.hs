@@ -8,7 +8,7 @@ import           Control.Monad.Fix      (MonadFix)
 import Data.Bool              (bool)
 import Data.Functor           (void)
 import qualified Data.Map.Strict as M
-import Data.Maybe             (fromMaybe)
+import Data.Maybe
 import Data.Text              (Text)
 import Data.Traversable       (for)
 import Obelisk.Route          (pattern (:/), R)
@@ -97,6 +97,7 @@ searchWidget = do
     ti <- inputElement $ def
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Search term..." <> "style" =: "border-radius: 0;")
+      & inputElementConfig_setValue .~ clearEv
     let search = (Windowed Nothing Nothing . SearchPackagesParams) <$> value ti
     searchResultsE <- backendGET $ (\term -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Search :/ term) <$> search
     searchResults <- holdDyn M.empty (fromMaybe M.empty <$> searchResultsE)
@@ -105,9 +106,13 @@ searchWidget = do
         elClass "i" "dropdown icon" blank
         divClass "menu" $ do
           listWithKey searchResults searchDropDownItem
-    let clickedItem = switchDyn $ leftmost . M.elems <$> clickedDyn
+    let enterEv = keypress Enter ti
+        elemsDyn = M.elems <$> clickedDyn
+        elemEnter = fmapMaybe (listToMaybe . map fst) $ tag (current elemsDyn) enterEv
+    let clickedItem = switchDyn $ leftmost . (elemEnter:) . map snd <$> elemsDyn
+        clearEv = "" <$ clickedItem
     setRoute ((\t -> FrontendRoute_Package :/ (DocumentSlug t)) <$> clickedItem)
     return ()
   where searchDropDownItem slug pkgModelDyn = do
           (r,_) <- elAttr' "div" ("class" =: "item") $ packagePreviewSmall $ (slug,) <$> pkgModelDyn
-          pure (slug <$ domEvent Click r)
+          pure (slug, slug <$ domEvent Click r)

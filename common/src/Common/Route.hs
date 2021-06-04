@@ -53,6 +53,7 @@ data ApiRoute :: * -> * where
   ApiRoute_Users :: ApiRoute PageName
   ApiRoute_User :: ApiRoute ()
   ApiRoute_Packages :: ApiRoute (R PackagesRoute)
+  ApiRoute_Package :: ApiRoute PageName
   ApiRoute_Profiles :: ApiRoute PageName
   ApiRoute_Tags :: ApiRoute PageName
 
@@ -169,6 +170,7 @@ apiRouteEncoder = pathComponentEncoder $ \case
   ApiRoute_Users -> PathSegment "users" $ id
   ApiRoute_User -> PathSegment "user" $ unitEncoder mempty
   ApiRoute_Packages -> PathSegment "packages" $ packagesRouteEncoder
+  ApiRoute_Package -> PathSegment "package" $ id
   ApiRoute_Profiles -> PathSegment "profiles" $ id
   ApiRoute_Tags -> PathSegment "tags" $ id
 

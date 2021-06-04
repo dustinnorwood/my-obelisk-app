@@ -193,6 +193,11 @@ backend = Backend
                 writeLBS $ encode pkgs
               PackagesRoute_Feed :/ w -> do
                 liftIO . putStrLn $ show w
+            ApiRoute_Package :/ r -> case r of
+              ((slug:_), _) -> do
+                mPkg <- select @PackageModel slug
+                writeLBS $ encode mPkg
+              _ -> writeLBS "404"
             ApiRoute_Profiles :/ _ -> pure ()
             ApiRoute_Tags :/ _ -> pure ()
         BackendRoute_GetSearchExamples :=> Identity () -> do

@@ -6,19 +6,22 @@ module Frontend.Package where
 import Reflex.Dom.Core hiding (Element)
 
 import           Data.Functor           (void)
+import qualified Data.Map.Strict        as M
+import qualified Data.Set               as S
 import           Data.Text              (Text)
+import qualified Data.Text              as T
 import qualified Data.Text.Lazy         as TL
 import           JSDOM.Generated.Document (createElement)
 import           GHCJS.DOM.Element      (setInnerHTML)
 import           GHCJS.DOM.Types        (liftJSM)
-import           Obelisk.Route.Frontend (Routed, askRoute)
+import           Obelisk.Route.Frontend
  
-import qualified Common.Api.Packages.Package       as Package
+import           Common.Api.Packages.Package
 import           Common.Api.Namespace              (unNamespace)
-import           Common.Route                              (DocumentSlug (..))
+import           Common.Route
 import qualified Frontend.Client                   as Client
 import           Frontend.FrontendStateT
-import           Frontend.Utils                            (buttonClass, showText)
+import           Frontend.Utils
 
 package
   :: forall t m js s
@@ -35,18 +38,24 @@ package = elClass "div" "package-page" $ do
   -- We ask our route for the document slug and make the backend call on load
   slugDyn <- askRoute
   pbE <- getPostBuild
+  let brDyn = (\(DocumentSlug s) -> BackendRoute_Api :/ ApiRoute_Package :/ ([s], M.empty)) <$> slugDyn
+  successE <- Client.backendGET brDyn
 
-  (successE,_,_) <- Client.getPackage (pure . unDocumentSlug <$> slugDyn) $ pbE
-
-  packageDyn <- holdDyn Nothing $ Just . unNamespace <$> successE
+  packageDyn <- holdDyn Nothing successE
 
   elClass "div" "banner" $
     elClass "div" "container" $ do
-      el "h1" $ dynText $ maybe "" Package.title <$> packageDyn
-      -- We are a little clumsy with dealing with not having
-      -- an package. We just disply a blank element while we
-      -- dont have one. Should be better. :)
-      void $ dyn $ maybe blank packageMeta <$> packageDyn
+      el "br" blank
+      el "br" blank
+      el "br" blank
+      packageImage "full-size" $ maybe "" packageModelImage <$> packageDyn
+      elClass "div" "package-container" $ do
+        el "h1" $ dynText $ maybe "" packageModelTitle <$> packageDyn
+        el "p" $ dynText $ maybe "" packageModelDescription <$> packageDyn
+        -- We are a little clumsy with dealing with not having
+        -- an package. We just disply a blank element while we
+        -- dont have one. Should be better. :)
+        void $ dyn $ maybe blank packageMeta <$> packageDyn
   elClass "div" "container page" $ do
     packageContent packageDyn
     el "hr" blank
@@ -57,11 +66,11 @@ packageMeta
   :: ( DomBuilder t m
      , PostBuild t m
      )
-  => Package.Package
+  => PackageModel
   -> m ()
 packageMeta art = elClass "div" "package-meta" $ do
   elClass "div" "info" $ do
-    elClass "span" "date" $ text (showText $ Package.createdAt art)
+    elClass "span" "date" $ text (showText $ packageModelCreatedAt art)
   actions
   where
     actions = do
@@ -69,7 +78,7 @@ packageMeta art = elClass "div" "package-meta" $ do
       _ <- buttonClass "btn btn-sm btn-outline-primary action-btn" (constDyn False) $ do
         elClass "i" "ion-heart" blank
         text " Add to Wishlist ("
-        elClass "span" "counter" $ text $ showText (Package.favoritesCount art)
+        elClass "span" "counter" $ text $ showText (S.size $ packageModelFavorited art)
         text ")"
       pure ()
 
@@ -78,14 +87,14 @@ packageContent
   .  ( DomBuilder t m
      , Prerender js t m
      )
-  => Dynamic t (Maybe Package.Package)
+  => Dynamic t (Maybe PackageModel)
   -> m ()
 packageContent packageDyn = prerender_ (text "Rendering Document...") $ do
-  let htmlDyn = (\mp -> (maybe "" Package.image mp, maybe "" Package.body mp)) <$> packageDyn
+  let htmlDyn = (maybe "" packageModelBody) <$> packageDyn
   elClass "div" "row package-content" $ do
     d <- askDocument
     -- We have to sample the initial value to set it on creation
-    ~(img, htmlT) <- sample . current $ htmlDyn
+    htmlT <- sample . current $ htmlDyn
     e <- liftJSM $ do
       -- This wont execute scripts, but will allow users to XSS attack through
       -- event handling javascript attributes in any raw HTML that is let
@@ -99,6 +108,18 @@ packageContent packageDyn = prerender_ (text "Rendering Document...") $ do
       setInnerHTML e htmlT
       pure e
     -- And make sure we update the html when the package changes
-    performEvent_ $ (liftJSM . setInnerHTML e . snd) <$> updated htmlDyn
+    performEvent_ $ (liftJSM . setInnerHTML e) <$> updated htmlDyn
     -- Put out raw element into our DomBuilder
     placeRawElement e
+
+packageImage
+  :: ( DomBuilder t m
+     , PostBuild t m
+     )
+  => Text -- Class
+  -> Dynamic t Text
+  -> m ()
+packageImage className imageDyn =
+  elDynAttr "img"
+    ((\i -> M.fromList [("src",imgUrl $ Just i),("class",className)]) <$> imageDyn)
+    blank

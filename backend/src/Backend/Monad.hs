@@ -104,6 +104,11 @@ instance Selectable (Prefixed (Map Text PackageModel)) SearchPackages VayconMemS
              then Nothing
              else Just . Prefixed $ M.fromList windowed
 
+instance Selectable PackageModel Text VayconMemServerM where
+  select slug = do
+    packageList <- asks _packages
+    pure $ M.lookup slug packageList
+
 -- instance (Lookupable (Map Text PackageModel) GetPackages) VayconServerM where
 --   lookup (Windowed l o (GetPackagesParams t f)) = runVayconErrorsT $ do
 --       runDatabase $ do
