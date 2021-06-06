@@ -45,11 +45,6 @@ import           Frontend.Register               (register)
 import           Frontend.Settings               (settings)
 import           Frontend.Utils                  (pathSegmentSubRoute, routeLinkClass)
 
-getSearchExamples ::
-  (MonadHold t m, PostBuild t m, Prerender js t m) =>
-  m (Event t (Maybe ExamplesResponse))
-getSearchExamples = Client.backendGET . constDyn $ BackendRoute_GetSearchExamples :/ ()
-
 type RoutedAppState t m = RoutedT t (R FrontendRoute) (AppState t m)
 
 type AppState t m

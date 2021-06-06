@@ -9,11 +9,13 @@ module Backend.Monad
 import Control.Lens hiding (Context, (??))
 
 import           Control.Monad                    (void, when)
-import           Control.Monad.FT
+import           Control.Monad.FT.Alter
 import           Control.Monad.Except             (ExceptT (ExceptT), runExceptT, withExceptT)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
 import           Control.Monad.Reader             (asks, ReaderT, runReaderT)
+import           Control.Monad.State
 -- import           Crypto.JOSE.JWK                  (JWK)
+import           Data.IORef
 import           Data.List                        (sortOn)
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as M
@@ -52,7 +54,7 @@ data VayconServerEnv = VayconServerEnv
 makeLenses ''VayconServerEnv
 
 data VayconMemServerEnv = VayconMemServerEnv
-  { _packages      :: Map Text PackageModel
+  { _packages      :: IORef (Map Text PackageModel)
   }
 makeLenses ''VayconMemServerEnv
 
@@ -63,9 +65,31 @@ type VayconServerContext = '[] --CookieSettings, JWTSettings]
 
 newtype Prefixed a = Prefixed { unPrefixed :: a }
 
+data Favorite = Favorite
+newtype FavoriteCount = FavoriteCount { unFavoriteCount :: Int }
+
+instance Selectable FavoriteCount Text VayconMemServerM where
+  select slug = do
+    pkgs <- asks _packages
+    mPkg <- fmap (M.lookup slug) . liftIO $ readIORef pkgs
+    pure $ FavoriteCount . Set.size . packageModelFavorited <$> mPkg
+
+instance Insertable Favorite (Text, Text) VayconMemServerM where
+  insert (slug, user) _ = do
+    pkgsRef <- asks _packages
+    liftIO . modifyIORef pkgsRef $ \pkgs ->
+      M.adjust (\pm@PackageModel{..} -> pm{ packageModelFavorited = Set.insert user packageModelFavorited }) slug pkgs
+
+instance Deletable Favorite (Text, Text) VayconMemServerM where
+  delete (slug, user) = do
+    pkgsRef <- asks _packages
+    liftIO . modifyIORef pkgsRef $ \pkgs ->
+      M.adjust (\pm@PackageModel{..} -> pm{ packageModelFavorited = Set.delete user packageModelFavorited }) slug pkgs
+
 instance Selectable (Map Text PackageModel) GetPackages VayconMemServerM where
   select (Windowed l o (GetPackagesParams t f)) = do
-    packageList <- M.toList <$> asks _packages
+    pkgsRef <- asks _packages
+    packageList <- fmap M.toList . liftIO $ readIORef pkgsRef
     let filteredForTags = case t of
                             Nothing -> packageList 
                             Just t' -> filter (\(_, PackageModel{..}) -> t' `Set.member` packageModelTags) packageList
@@ -80,7 +104,8 @@ instance Selectable (Map Text PackageModel) GetPackages VayconMemServerM where
 
 instance Selectable (Prefixed (Map Text PackageModel)) SearchPackages VayconMemServerM where
   select (Windowed l o (SearchPackagesParams t)) = do
-    packageList <- asks _packages
+    pkgsRef <- asks _packages
+    packageList <- liftIO $ readIORef pkgsRef
     let filtered = case T.toLower t of
           "" -> M.empty
           t' -> 
@@ -106,7 +131,8 @@ instance Selectable (Prefixed (Map Text PackageModel)) SearchPackages VayconMemS
 
 instance Selectable PackageModel Text VayconMemServerM where
   select slug = do
-    packageList <- asks _packages
+    pkgsRef <- asks _packages
+    packageList <- liftIO $ readIORef pkgsRef
     pure $ M.lookup slug packageList
 
 -- instance (Lookupable (Map Text PackageModel) GetPackages) VayconServerM where

@@ -10,8 +10,9 @@ import Reflex
 import Reflex.Dom.Core hiding (Namespace)
 
 import Common.Api.Packages.Package (PackageModel)
+import Control.Applicative     (liftA2)
 import Control.Monad           (join)
-import Data.Aeson              (decode, FromJSON)
+import Data.Aeson              (decode, ToJSON, FromJSON)
 import Data.Dependent.Sum      (DSum(..))
 import Data.Functor.Identity   (Identity (..))
 import Data.Map.Strict         (Map)
@@ -61,6 +62,36 @@ backendGET ::
 backendGET routeDyn = urlGET urlDyn
   where
     urlDyn = renderBackendRoute enc <$> routeDyn
+    Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
+
+-- | Simplified interface to "POST" URLs and return decoded results.
+postAndDecode :: (ToJSON a, FromJSON b, MonadWidget t m) => Event t (Text, a) -> m (Event t (Maybe b))
+postAndDecode urlAndBody = do
+  r <- performRequestAsync $ fmap (uncurry postJson) urlAndBody
+  return $ fmap decodeXhrResponse r
+
+urlPOST ::
+  (MonadHold t m, PostBuild t m, Prerender js t m, ToJSON a, FromJSON b) =>
+  Dynamic t Text -> Dynamic t a -> m (Event t (Maybe b))
+urlPOST urlDyn bodyDyn = fmap switchDyn $ prerender (pure never) $ do
+  let urlAndBodyDyn = liftA2 (,) urlDyn bodyDyn
+  pb <- getPostBuild
+  postAndDecode $ leftmost [updated urlAndBodyDyn, tagPromptlyDyn urlAndBodyDyn pb]
+
+backendPOST ::
+  (MonadHold t m, PostBuild t m, Prerender js t m, ToJSON a, FromJSON b) =>
+  Dynamic t (DSum BackendRoute Identity) -> Dynamic t a -> m (Event t (Maybe b))
+backendPOST routeDyn = urlPOST urlDyn
+  where
+    urlDyn = renderBackendRoute enc <$> routeDyn
+    Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
+
+backendPostEvent ::
+  (MonadHold t m, PostBuild t m, Prerender js t m, ToJSON a, FromJSON b) =>
+  Event t (DSum BackendRoute Identity, a) -> m (Event t (Maybe b))
+backendPostEvent routeDyn = fmap switchDyn . prerender (pure never) $ postAndDecode urlDyn
+  where
+    urlDyn = (\(r, b) -> (renderBackendRoute enc r, b)) <$> routeDyn
     Right (enc :: Encoder Identity Identity (R (FullRoute BackendRoute FrontendRoute)) PageName) = checkEncoder fullRouteEncoder
 
 login

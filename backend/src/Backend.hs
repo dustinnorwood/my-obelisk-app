@@ -26,6 +26,7 @@ import qualified Crypto.JOSE.Types                as HOSE
 import           Data.Aeson
 import           Data.Dependent.Sum              (DSum ((:=>)))
 import           Data.Functor.Identity           (Identity (..))
+import           Data.IORef
 import qualified Data.Map.Strict                 as M
 import           Data.Maybe                      (fromMaybe)
 import           Data.Monoid                     ((<>))
@@ -50,8 +51,10 @@ getYolo l = do
                 T.decodeUtf8 <$> M.lookup l' configs
   pure route
 
-runVaycon = runVayconMemServerM $ VayconMemServerEnv pkgs
-  where pkgs = M.fromList
+runVaycon = runVayconMemServerM . VayconMemServerEnv
+
+pkgs :: M.Map Text PackageModel
+pkgs = M.fromList
           [("burger-pursuit", PackageModel
             "Burger Pursuit"
             "Ketchup to these patties in this all-out arms race to the best burger bars in Dallas"
@@ -156,6 +159,7 @@ backend = Backend
 
       cfg <- readBackendConfig
       liftIO $ T.putStrLn $ "routeEnv: " <> _backendConfig_routeEnv cfg
+      pkgsRef <- newIORef pkgs
       serve $ \case
         BackendRoute_Missing :=> Identity () -> do
           writeLBS "404"
@@ -176,44 +180,46 @@ backend = Backend
               handleGoogleOAuthCallback cfg code
               redirect $ T.encodeUtf8 $ fromMaybe (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) mstate
         BackendRoute_Api :/ apiR  -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) >>= \case
+          eUser <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) >>= \case
             Left e -> pure $ Left e
             Right u -> pure $ Right u
-          runVaycon $ case apiR of
+          runVaycon pkgsRef $ case apiR of
             ApiRoute_Users :/ _ -> pure ()
-            ApiRoute_User :/ _ -> case resp of
+            ApiRoute_User :/ _ -> case eUser of
               Right t -> writeLBS $ encode t
               Left u -> pure ()
             ApiRoute_Packages :/ packagesR -> case packagesR of
               PackagesRoute_Get :/ w -> do
                 pkgs <- fromMaybe M.empty <$> select @(M.Map Text PackageModel) w
-                writeLBS $ encode pkgs
+                writeLBS $ encode (pkgs, either (const False) (const True) eUser)
               PackagesRoute_Search :/ sp -> do
                 pkgs <- maybe M.empty unPrefixed <$> select @(Prefixed (M.Map Text PackageModel)) sp
                 writeLBS $ encode pkgs
               PackagesRoute_Feed :/ w -> do
                 liftIO . putStrLn $ show w
-            ApiRoute_Package :/ r -> case r of
-              ((slug:_), _) -> do
+            ApiRoute_Package :/ (DocumentSlug slug, m) -> case m of
+              Nothing -> do
                 mPkg <- select @PackageModel slug
-                writeLBS $ encode mPkg
+                writeLBS $ encode $ (\pkg -> (pkg, either (const False) (const True) eUser)) <$> mPkg
+              Just (PackageRoute_Favorite :/ ()) -> do
+                case eUser of
+                  Left e -> do
+                    mPkg <- select @PackageModel slug
+                    writeLBS $ encode mPkg
+                  Right e -> do
+                    insert @Favorite (slug, e) Favorite
+                    mPkg <- select @PackageModel slug
+                    writeLBS $ encode mPkg
+              Just (PackageRoute_Unfavorite :/ ()) -> do
+                case eUser of
+                  Left e -> do
+                    mPkg <- select @PackageModel slug
+                    writeLBS $ encode mPkg
+                  Right e -> do
+                    delete @Favorite (slug, e)
+                    mPkg <- select @PackageModel slug
+                    writeLBS $ encode mPkg
               _ -> writeLBS "404"
             ApiRoute_Profiles :/ _ -> pure ()
             ApiRoute_Tags :/ _ -> pure ()
-        BackendRoute_GetSearchExamples :=> Identity () -> do
-          resp <- authorizeUser cfg (renderFrontendRoute (_backendConfig_enc cfg) homeRoute) >>= \case
-            Left e -> pure $ Left e
-            Right u -> do
-              -- TODO: This should be generic, and dates determined automatically.
-              let examples :: [(Text, Text)] =
-                    [ ("Do a basic search", "sunny day"),
-                      ("Use quotes for exact match", "\"great day\""),
-                      ("Browse messages on a particular day", "during:2018-8-23"),
-                      ("All messages in #general channel", "in:general"),
-                      ("Messages by Andrew in #random channel", "in:random from:andrew"),
-                      ("Messages in #general after August 2018", "after:2018-08-01 in:general"),
-                      ("Messages in #random during mid 2016", "after:2016-08-01 before:2016-09-01 in:random")
-                    ]
-              pure $ Right (u, examples)
-          writeLBS $ encode resp
   }

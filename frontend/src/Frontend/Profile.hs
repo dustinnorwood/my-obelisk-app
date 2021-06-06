@@ -7,6 +7,7 @@ import Reflex.Dom.Core
 import Control.Monad.Fix      (MonadFix)
 import Data.Bool              (bool)
 import Data.Functor           (void)
+import Data.Maybe             (fromMaybe)
 import qualified Data.Map.Strict as M
 import Obelisk.Route.Frontend (pattern (:/), R, RouteToUrl, RoutedT, SetRoute, askRoute)
 import Servant.Common.Req     (QParam (QNone))
@@ -14,7 +15,7 @@ import Servant.Common.Req     (QParam (QNone))
 import           Common.Api.Packages.Packages (Packages (..))
 import           Common.Api.Namespace         (Namespace(Namespace))
 import qualified Common.Api.Profiles.Profile  as Profile
-import           Common.Route                         (FrontendRoute (..), ProfileRoute (..), Username (..))
+import           Common.Route
 import           Frontend.PackagePreview              (packagesPreview)
 import qualified Frontend.Client              as Client
 import           Frontend.FrontendStateT
@@ -62,15 +63,10 @@ profile usernameDyn = do
             navItem Nothing rDyn $ text "My Packages"
             navItem (Just $ ProfileRoute_Favourites :/ ()) rDyn $ text "My Favourites"
 
-          (loadPkgsSuccessE,_,pkgsLoadingDyn) <- Client.listPackages
-            (constDyn QNone)
-            (constDyn QNone)
-            (constDyn [])
-            (constDyn [])
-            pbE
-
-          pkgsDyn <- holdDyn M.empty loadPkgsSuccessE
-          packagesPreview pkgsLoadingDyn pkgsDyn
+          let rDyn = constDyn rdef
+          mPkgsE <- Client.backendGET $ (\r -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Get :/ r) <$> rDyn
+          pkgsDyn <- holdDyn (M.empty, False) $ fromMaybe (M.empty, False) <$> mPkgsE
+          packagesPreview pkgsDyn
   where
     navItem sr rDyn = elClass "li" "nav-item" . routeLinkDynClass
       (("nav-link " <>) . bool "" " active" . (== sr) <$> rDyn)

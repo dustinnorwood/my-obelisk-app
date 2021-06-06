@@ -22,7 +22,7 @@ import           Servant.Common.Req     (QParam (QNone, QParamSome))
 
 import           Common.Api.Namespace         (Namespace (Namespace), unNamespace)
 import           Common.Api.Packages.Packages (Packages (..))
-import           Common.Route                         (FrontendRoute (..), GetPackagesParams(..), Windowed(..), GetPackages)
+import           Common.Route
 import           Frontend.PackagePreview              (packagesPreview)
 import qualified Frontend.Client                      as Client
 import           Frontend.FrontendStateT
@@ -76,16 +76,10 @@ homePage = do
               navItem (Just "price-med") rDyn $ text "$$"
               navItem (Just "price-high") rDyn $ text "$$$"
               navItem (Just "price-lambo") rDyn $ text "$$$$"
-              let ttt = rDyn >>= \(Windowed _ _ (GetPackagesParams t _)) -> pure t
-              (loadPkgsSuccessE,loadPkgsFailureE,pkgsLoadingDyn) <- Client.listPackages
-                (constDyn QNone)
-                (constDyn QNone)
-                ((:[]) . fromMaybe "popular" <$> ttt)
-                (constDyn [])
-                (() <$ updated rDyn)
-
-              pkgsDyn <- holdDyn M.empty loadPkgsSuccessE
-              packagesPreview pkgsLoadingDyn pkgsDyn
+              let ttt = (item . term %~ (Just . fromMaybe "popular")) <$> rDyn
+              mPkgsE <- Client.backendGET $ (\r -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Get :/ r) <$> rDyn
+              pkgsDyn <- holdDyn (M.empty, False) $ fromMaybe (M.empty, False) <$> mPkgsE
+              packagesPreview pkgsDyn
   pure ()
   where
     navItem q rDyn =

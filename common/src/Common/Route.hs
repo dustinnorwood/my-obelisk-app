@@ -37,12 +37,45 @@ makeWrapped ''DocumentSlug
 newtype Username = Username { unUsername :: Text } deriving (Eq, Ord, Show)
 makeWrapped ''Username
 
+data Windowed a = Windowed
+  { _limit       :: Maybe Integer
+  , _offset      :: Maybe Integer
+  , _item        :: a
+  } deriving (Eq, Ord, Show)
+makeLenses ''Windowed
+
+data GetPackagesParams = GetPackagesParams
+  { _term        :: Maybe Text
+  , _favorited   :: Maybe Text
+  } deriving (Eq, Ord, Show)
+makeLenses ''GetPackagesParams
+
+data SearchPackagesParams = SearchPackagesParams
+  { _search      :: Text
+  } deriving (Eq, Ord, Show)
+makeLenses ''SearchPackagesParams
+
+type GetPackages     = Windowed GetPackagesParams
+type SearchPackages  = Windowed SearchPackagesParams
+type GetPackagesFeed = Windowed ()
+
+class RDefault a where
+  rdef :: a
+
+instance RDefault GetPackagesParams where
+  rdef = GetPackagesParams Nothing Nothing
+
+instance RDefault SearchPackagesParams where
+  rdef = SearchPackagesParams ""
+
+instance RDefault a => RDefault (Windowed a) where
+  rdef = Windowed Nothing Nothing rdef
+
 data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
   BackendRoute_Missing :: BackendRoute ()
   BackendRoute_Api :: BackendRoute (R ApiRoute)
   BackendRoute_OAuth :: BackendRoute (R OAuthProviderRoute)
-  BackendRoute_GetSearchExamples :: BackendRoute ()
 
 data OAuthProviderRoute :: * -> * where
   OAuthProviderRoute_List   :: OAuthProviderRoute ()
@@ -53,15 +86,9 @@ data ApiRoute :: * -> * where
   ApiRoute_Users :: ApiRoute PageName
   ApiRoute_User :: ApiRoute ()
   ApiRoute_Packages :: ApiRoute (R PackagesRoute)
-  ApiRoute_Package :: ApiRoute PageName
+  ApiRoute_Package :: ApiRoute (DocumentSlug, Maybe (R PackageRoute))
   ApiRoute_Profiles :: ApiRoute PageName
   ApiRoute_Tags :: ApiRoute PageName
-
-data Windowed a = Windowed
-  { _limit       :: Maybe Integer
-  , _offset      :: Maybe Integer
-  , _item        :: a
-  } deriving (Eq, Ord, Show)
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
@@ -81,19 +108,6 @@ windowedEncoder itemEncoder = unsafeMkEncoder $ EncoderImpl
                              (decode queryEncoder . fromMaybe "" . join $ M.lookup "offset" m)
                              (decode itemEncoder m))
   (\(Windowed l o i) -> M.union (mkQueryList [("limit", tshow <$> l), ("offset", tshow <$> o)]) (encode itemEncoder i))
-
-data GetPackagesParams = GetPackagesParams
-  { _tag         :: Maybe Text
-  , _favorited   :: Maybe Text
-  } deriving (Eq, Ord, Show)
-
-data SearchPackagesParams = SearchPackagesParams
-  { _search      :: Text
-  } deriving (Eq, Ord, Show)
-
-type GetPackages     = Windowed GetPackagesParams
-type SearchPackages  = Windowed SearchPackagesParams
-type GetPackagesFeed = Windowed ()
 
 emptyGetPackages :: GetPackages
 emptyGetPackages = Windowed Nothing Nothing (GetPackagesParams Nothing Nothing)
@@ -128,6 +142,10 @@ data PackagesRoute :: * -> * where
   PackagesRoute_Search :: PackagesRoute SearchPackages
   PackagesRoute_Feed   :: PackagesRoute GetPackagesFeed
 
+data PackageRoute :: * -> * where
+  PackageRoute_Favorite :: PackageRoute ()
+  PackageRoute_Unfavorite :: PackageRoute ()
+
 data FrontendRoute :: * -> * where
   FrontendRoute_Home :: FrontendRoute GetPackages
   FrontendRoute_Login :: FrontendRoute ()
@@ -148,7 +166,6 @@ fullRouteEncoder = mkFullRouteEncoder
       BackendRoute_Missing           -> PathSegment "missing" $ unitEncoder mempty
       BackendRoute_Api               -> PathSegment "api" $ apiRouteEncoder
       BackendRoute_OAuth             -> PathSegment "oauth" $ oauthProviderRouteEncoder
-      BackendRoute_GetSearchExamples -> PathSegment "get-search-examples" $ unitEncoder mempty
   )
   (\case
       FrontendRoute_Home -> PathEnd
@@ -170,7 +187,11 @@ apiRouteEncoder = pathComponentEncoder $ \case
   ApiRoute_Users -> PathSegment "users" $ id
   ApiRoute_User -> PathSegment "user" $ unitEncoder mempty
   ApiRoute_Packages -> PathSegment "packages" $ packagesRouteEncoder
-  ApiRoute_Package -> PathSegment "package" $ id
+  ApiRoute_Package -> PathSegment "package" $
+        let packageRouteEncoder = pathComponentEncoder $ \case
+              PackageRoute_Favorite -> PathSegment "favorite" $ unitEncoder mempty
+              PackageRoute_Unfavorite -> PathSegment "unfavorite" $ unitEncoder mempty
+        in ( pathSegmentEncoder . bimap unwrappedEncoder (maybeEncoder (unitEncoder mempty) packageRouteEncoder ) )
   ApiRoute_Profiles -> PathSegment "profiles" $ id
   ApiRoute_Tags -> PathSegment "tags" $ id
 
@@ -205,6 +226,7 @@ concat <$> mapM deriveRouteComponent
   [ ''BackendRoute
   , ''ApiRoute
   , ''PackagesRoute
+  , ''PackageRoute
   , ''OAuthProviderRoute
   , ''FrontendRoute
   , ''ProfileRoute

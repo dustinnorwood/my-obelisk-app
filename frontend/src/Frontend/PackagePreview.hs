@@ -1,9 +1,10 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, PatternSynonyms #-}
+{-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, RecursiveDo, PatternSynonyms, TupleSections #-}
 module Frontend.PackagePreview where
 
 
 import Reflex.Dom.Core
 
+import           Control.Monad          (join)
 import           Control.Monad.Fix      (MonadFix)
 import           Data.Bool              (bool)
 import           Data.Functor           (void)
@@ -16,7 +17,8 @@ import qualified Data.Text.Lazy         as TL
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute)
 
-import Common.Route   (DocumentSlug (..), FrontendRoute (..), Username (..))
+import Common.Route
+import qualified Frontend.Client        as Client
 import Frontend.Utils (imgUrl, routeLinkDyn, routeLinkDynClass)
 
 import           Common.Api.Packages.Package  (Package, PackageModel(..))
@@ -32,18 +34,17 @@ packagesPreview
      , SetRoute t (R FrontendRoute) m
      , MonadHold t m
      , MonadFix m
+     , MonadSample t m
+     , Prerender js t m
      )
-  => Dynamic t Bool
-  -> Dynamic t (Map Text PackageModel)
+  => Dynamic t (Map Text PackageModel, Bool)
   -> m ()
-packagesPreview artsLoading artMapDyn = void . dyn . ffor artsLoading $ bool loaded loading
+packagesPreview artMapDyn = dyn_ $ loaded <$> artMapDyn
   where
-    loaded = void . elClass "div" "row" $ dyn $ ffor artMapDyn $ \m ->
+    loaded (m, b) = elClass "div" "row" $
         if Map.null m
-        then blankPreview "There is nothing here ... yet!"
-        else void $ list (Map.mapWithKey (\k v -> (k, v)) <$> artMapDyn) $ packagePreview
-    loading = blankPreview "Loading..."
-    blankPreview = elClass "div" "package-preview" . el "em" . text
+        then blank
+        else void $ list ((\(m, b) -> Map.mapWithKey (\k v -> (k, v, b)) m) <$> artMapDyn) $ packagePreview
 
 packagePreviewSmall
   :: ( DomBuilder t m
@@ -66,21 +67,34 @@ packagePreview
      , PostBuild t m
      , RouteToUrl (R FrontendRoute) m
      , SetRoute t (R FrontendRoute) m
+     , MonadFix m
+     , MonadHold t m
      , MonadSample t m
+     , Prerender js t m
      )
-  => Dynamic t (Text, PackageModel) -> m ()
-packagePreview packageDyn = elClass "div" "package-preview col-md-3" $ do
-  elClass "div" "package-meta" $ do
-    packageImage "" $ packageModelImage . snd <$> packageDyn
-    elClass "button" "btn btn-outline-primary btn-sm pull-xs-right" $ do
+  => Dynamic t (Text, PackageModel, Bool) -> m ()
+packagePreview packageUserDyn = elClass "div" "package-preview col-md-3" $ do
+  elClass "div" "package-meta" $ mdo
+    let packageDyn = (\(s,p,_) -> (s,p)) <$> packageUserDyn
+    packageD <- fmap join $ foldDyn (\pm d -> fmap (\(s,_) -> (s,pm)) d) packageDyn packageE
+    packageImage "" $ packageModelImage . snd <$> packageD
+    let dAttrs = (\(_,_,b) -> ("class" =: ((if b then "" else "disabled ") <> "btn btn-outline-primary btn-sm pull-xs-right"))) <$> packageUserDyn
+    (r,_) <- elDynAttr' "button" dAttrs $ do
       elClass "i" "ion-heart" blank
       text " "
-      display $ S.size . packageModelFavorited . snd <$> packageDyn
+      dynText $ T.pack . show . S.size . packageModelFavorited . snd <$> packageD
+      pure ()
+    let favoriteE = tag (fst <$> current packageDyn) $ domEvent Click r
+    let urlE = (\s -> BackendRoute_Api :/ ApiRoute_Package :/ (DocumentSlug s, Just (PackageRoute_Favorite :/ ()))) <$> favoriteE
+    mPackageE <- Client.backendPostEvent ((,()) <$> urlE)
+    let packageE = fmapMaybe id mPackageE
     routeLinkDynClass (constDyn "preview-link")
-      ((\a -> FrontendRoute_Package :/ (DocumentSlug $ fst a)) <$> packageDyn)
+      ((\a -> FrontendRoute_Package :/ (DocumentSlug $ fst a)) <$> packageD)
       $ do
-        el "h3" $ dynText $ packageModelTitle . snd <$> packageDyn
-    el "p" $ dynText $ (<>"...") . T.unwords . take 10 . T.words . packageModelDescription . snd <$> packageDyn
+        el "h3" $ dynText $ packageModelTitle . snd <$> packageD
+    el "p" $ dynText $ (<>"...") . T.unwords . take 10 . T.words . packageModelDescription . snd <$> packageD
+    pure ()
+  pure ()
 
 profileRoute
   :: Profile.Profile

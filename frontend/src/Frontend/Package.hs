@@ -38,59 +38,59 @@ package = elClass "div" "package-page" $ do
   -- We ask our route for the document slug and make the backend call on load
   slugDyn <- askRoute
   pbE <- getPostBuild
-  let brDyn = (\(DocumentSlug s) -> BackendRoute_Api :/ ApiRoute_Package :/ ([s], M.empty)) <$> slugDyn
+  let brDyn = (\s -> BackendRoute_Api :/ ApiRoute_Package :/ (s, Nothing)) <$> slugDyn
   successE <- Client.backendGET brDyn
 
-  packageDyn <- holdDyn Nothing successE
+  packageUserDyn <- holdDyn Nothing successE
 
-  elClass "div" "banner" $
-    elClass "div" "container" $ do
-      el "br" blank
-      el "br" blank
-      el "br" blank
-      packageImage "full-size" $ maybe "" packageModelImage <$> packageDyn
-      elClass "div" "package-container" $ do
-        el "h1" $ dynText $ maybe "" packageModelTitle <$> packageDyn
-        el "p" $ dynText $ maybe "" packageModelDescription <$> packageDyn
-        -- We are a little clumsy with dealing with not having
-        -- an package. We just disply a blank element while we
-        -- dont have one. Should be better. :)
-        void $ dyn $ maybe blank packageMeta <$> packageDyn
   elClass "div" "container page" $ do
-    packageContent packageDyn
-    el "hr" blank
-    elClass "div" "row package-actions" $
-      void $ dyn $ maybe blank packageMeta <$> packageDyn
+    packageContent packageUserDyn
 
 packageMeta
   :: ( DomBuilder t m
      , PostBuild t m
      )
   => PackageModel
+  -> Bool
   -> m ()
-packageMeta art = elClass "div" "package-meta" $ do
-  elClass "div" "info" $ do
-    elClass "span" "date" $ text (showText $ packageModelCreatedAt art)
+packageMeta art add = elClass "div" "package-meta" $ do
   actions
   where
     actions = do
       -- TODO : Do something with this click
-      _ <- buttonClass "btn btn-sm btn-outline-primary action-btn" (constDyn False) $ do
-        elClass "i" "ion-heart" blank
-        text " Add to Wishlist ("
-        elClass "span" "counter" $ text $ showText (S.size $ packageModelFavorited art)
-        text ")"
-      pure ()
+      if add
+        then do
+          _ <- buttonClass "btn btn-sm btn-outline-primary action-btn" (constDyn False) $ do
+            elClass "i" "ion-heart" blank
+            text " Add to Wishlist ("
+            elClass "span" "counter" $ text $ showText (S.size $ packageModelFavorited art)
+            text ")"
+          pure ()
+        else blank
 
 packageContent
   :: forall t m js
   .  ( DomBuilder t m
      , Prerender js t m
      )
-  => Dynamic t (Maybe PackageModel)
+  => Dynamic t (Maybe (PackageModel, Bool))
   -> m ()
-packageContent packageDyn = prerender_ (text "Rendering Document...") $ do
+packageContent packageUserDyn = prerender_ blank $ do
+  let packageDyn = fmap fst <$> packageUserDyn
   let htmlDyn = (maybe "" packageModelBody) <$> packageDyn
+  elClass "div" "banner" $
+    elClass "div" "container" $ do
+      el "br" blank
+      el "br" blank
+      el "br" blank
+      dyn_ $ maybe blank (packageImage "full-size" . packageModelImage) <$> packageDyn
+      elClass "div" "package-container" $ do
+        el "h1" $ dynText $ maybe "" packageModelTitle <$> packageDyn
+        el "p" $ dynText $ maybe "" packageModelDescription <$> packageDyn
+        -- We are a little clumsy with dealing with not having
+        -- an package. We just disply a blank element while we
+        -- dont have one. Should be better. :)
+        void $ dyn $ maybe blank (uncurry packageMeta) <$> packageUserDyn
   elClass "div" "row package-content" $ do
     d <- askDocument
     -- We have to sample the initial value to set it on creation
@@ -117,9 +117,9 @@ packageImage
      , PostBuild t m
      )
   => Text -- Class
-  -> Dynamic t Text
+  -> Text
   -> m ()
-packageImage className imageDyn =
-  elDynAttr "img"
-    ((\i -> M.fromList [("src",imgUrl $ Just i),("class",className)]) <$> imageDyn)
+packageImage className i =
+  elAttr "img"
+    (M.fromList [("src",imgUrl $ Just i),("class",className)])
     blank
