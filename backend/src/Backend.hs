@@ -207,7 +207,7 @@ backend = Backend
             ApiRoute_Package :/ (DocumentSlug slug, m) -> case m of
               Nothing -> do
                 mPkg <- select @PackageModel slug
-                writeLBS $ encode $ (\pkg -> (pkg, either (const False) (const True) eUser)) <$> mPkg
+                writeLBS $ encode $ (\pkg -> (pkg, either (const Nothing) Just eUser)) <$> mPkg
               Just (PackageRoute_Favorite :/ ()) -> do
                 case eUser of
                   Left e -> do
