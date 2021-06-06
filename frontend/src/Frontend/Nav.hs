@@ -108,12 +108,14 @@ searchWidget = do
         elClass "i" "dropdown icon" blank
         divClass "menu" $ do
           listWithKey searchResults searchDropDownItem
-    let enterEv = keypress Enter ti
+    let enterEv = tag (current $ value ti) $ keypress Enter ti
         elemsDyn = M.elems <$> clickedDyn
-        elemEnter = fmapMaybe (listToMaybe . map fst) $ tag (current elemsDyn) enterEv
-    let clickedItem = switchDyn $ leftmost . (elemEnter:) . map snd <$> elemsDyn
-        clearEv = "" <$ clickedItem
+        clickedItem = switchDyn $ leftmost . map snd <$> elemsDyn
+        clearEv = leftmost ["" <$ enterEv, "" <$ clickedItem]
+        searchPageQuery = ffor enterEv $ \t -> rdef & item . search .~ t
+                                                    & limit ?~ 25
     setRoute ((\t -> FrontendRoute_Package :/ (DocumentSlug t)) <$> clickedItem)
+    setRoute ((\t -> FrontendRoute_Search :/ t) <$> searchPageQuery)
     return ()
   where searchDropDownItem slug pkgModelDyn = do
           (r,_) <- elAttr' "div" ("class" =: "item") $ packagePreviewSmall $ (slug,) <$> pkgModelDyn

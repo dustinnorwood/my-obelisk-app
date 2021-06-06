@@ -148,6 +148,7 @@ data PackageRoute :: * -> * where
 
 data FrontendRoute :: * -> * where
   FrontendRoute_Home :: FrontendRoute GetPackages
+  FrontendRoute_Search :: FrontendRoute SearchPackages
   FrontendRoute_Login :: FrontendRoute ()
   FrontendRoute_Register :: FrontendRoute ()
   FrontendRoute_Settings :: FrontendRoute ()
@@ -171,6 +172,12 @@ fullRouteEncoder = mkFullRouteEncoder
       FrontendRoute_Home -> PathEnd
                           . hoistParse (pure . runIdentity)
                           $ hoistCheck (pure . runIdentity) getPackagesEncoder
+      FrontendRoute_Search -> PathSegment "search"
+                            $ queryOnlyEncoder .
+                            ( hoistParse (pure . runIdentity)
+                            . hoistCheck (pure . runIdentity)
+                            $ searchPackagesEncoder
+                            )
       FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
       FrontendRoute_Register -> PathSegment "register" $ unitEncoder mempty
       FrontendRoute_Settings -> PathSegment "settings" $ unitEncoder mempty

@@ -42,6 +42,7 @@ import           Frontend.Nav                    (nav)
 import           Frontend.Package                (package)
 import           Frontend.Profile                (profile)
 import           Frontend.Register               (register)
+import           Frontend.Search                 (searchPage)
 import           Frontend.Settings               (settings)
 import           Frontend.Utils                  (pathSegmentSubRoute, routeLinkClass)
 
@@ -83,6 +84,7 @@ htmlBody = mapRoutedT unravelAppState $ do
           ()
     pages r = case r of
       FrontendRoute_Home     -> homePage
+      FrontendRoute_Search   -> searchPage
       FrontendRoute_Login    -> login
       FrontendRoute_Register -> register
       FrontendRoute_Package  -> package
