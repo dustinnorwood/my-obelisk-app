@@ -65,9 +65,11 @@ homePage = do
         elClass "div" "col-xs-12 col-md-10 offset-md-1" $ do
           elClass "div" "packages-toggle" $ do
             elClass "ul" "nav nav-pills outline-active" $ do
-              rDyn <- askRoute
-              let reload = leftmost [newSelection, () <$ updated rDyn]
-              navItem Nothing rDyn $ text "Popular"
+              rDyn' <- askRoute
+              let rDyn = ffor rDyn' $ \d -> d & item . term %~ Just . fromMaybe "popular"
+                                              & limit ?~ 12
+                  reload = leftmost [newSelection, () <$ updated rDyn]
+              navItem (Just "popular") rDyn $ text "Popular"
               navItem (Just "top-rated") rDyn $ text "Top Rated"
               navItem (Just "we-think-you-will-like") rDyn $ text "We Think You Will Like"
               navItem (Just "today") rDyn $ text "Today"
@@ -78,12 +80,12 @@ homePage = do
               navItem (Just "price-lambo") rDyn $ text "$$$$"
               let ttt = (item . term %~ (Just . fromMaybe "popular")) <$> rDyn
               mPkgsE <- Client.backendGET $ (\r -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Get :/ r) <$> rDyn
-              pkgsDyn <- holdDyn (M.empty, False) $ fromMaybe (M.empty, False) <$> mPkgsE
+              pkgsDyn <- holdDyn (M.empty, Nothing) $ fromMaybe (M.empty, Nothing) <$> mPkgsE
               packagesPreview pkgsDyn
   pure ()
   where
     navItem q rDyn =
-      let gp = Windowed Nothing Nothing (GetPackagesParams q Nothing)
+      let gp = rdef & item . term .~ q
        in elClass "li" "nav-item" . routeLinkDynClass
-      ((\(Windowed _ _ (GetPackagesParams mq _)) -> ("nav-link " <>) . bool "" " active" $ mq == q) <$> rDyn)
+      ((\w -> ("nav-link " <>) . bool "" " active" $ (w ^. item . term) == q) <$> rDyn)
       (constDyn $ FrontendRoute_Home :/ gp)

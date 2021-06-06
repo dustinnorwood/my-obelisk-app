@@ -1,3 +1,7 @@
 p {
   color: red;  
 }
+
+.selected {
+  background-color:chartreuse;
+}

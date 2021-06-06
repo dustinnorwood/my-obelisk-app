@@ -63,7 +63,7 @@ pkgs = M.fromList
             (read "2021-03-27 23:48:45.982494 UTC")
             (read "2021-03-27 23:48:45.982494 UTC")
             (S.fromList ["we-think-you-will-like", "today", "price-med"])
-            S.empty
+            (S.fromList ["a","b","c"])
           ),
           ("dinos-and-drinks", PackageModel
             "Dinos and Drinks"
@@ -73,7 +73,8 @@ pkgs = M.fromList
             (read "2021-03-27 23:51:44.856755 UTC")
             (read "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["we-think-you-will-like", "this-weekend", "price-med"])
-            S.empty),
+            (S.fromList ["a","b","c","d"])
+          ),
           ("animals-of-dallas", PackageModel
             "Animals of Dallas"
             "Do you live under a rock? Come hang with some of your own kind that literally do."
@@ -82,7 +83,8 @@ pkgs = M.fromList
             (read "2021-03-27 23:51:44.856755 UTC")
             (read "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["we-think-you-will-like", "popular", "this-weekend", "price-low"])
-            S.empty),
+            (S.fromList ["a","b","c","d","e"])
+          ),
           ("beef-hunt", PackageModel
             "Beef Hunt"
             "Your voices have been herd: all aboard the stock train to Tenderville! (all well-done requests will be met with a condescending guffaw and a lifetime ban from these bovine-centric establishments)"
@@ -91,7 +93,8 @@ pkgs = M.fromList
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["we-think-you-will-like", "popular", "today", "price-high"])
-            S.empty),
+            (S.fromList ["a","c","e"])
+          ),
           ("tacos-and-talks", PackageModel 
             "Tacos and Talks"
             "No, this isn't your drunk cousin cooking velveeta and rotel while blathering about their workplace drama. Come listen to certified TEDx speakers blather about _their_ workplace drama while indulging in one of the few things Texas does right."
@@ -100,7 +103,8 @@ pkgs = M.fromList
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["top-rated", "price-low"])
-            S.empty),
+            (S.fromList ["c","e"])
+          ),
           ("zoo-stuff", PackageModel 
             "Zoo Stuff"
             "We couldn't come up with a better name for this one?"
@@ -109,7 +113,8 @@ pkgs = M.fromList
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["top-rated", "today", "this-weekend", "price-med"])
-            S.empty),
+            (S.fromList ["x","y","z"])
+          ),
           ("girls-girls-girls", PackageModel
             "Girls Girls Girls"
             "There's nothing religious about this Easter Egg! Come party with the best bunnies Dallas has to offer, if that's what you're into."
@@ -118,7 +123,8 @@ pkgs = M.fromList
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["top-rated", "price-lambo"])
-            S.empty),
+            (S.fromList ["w","x","y","z"])
+          ),
           ("water-world", PackageModel
             "Water World"
             "Basically our Girls Girls Girls package for the whole family."
@@ -136,7 +142,8 @@ pkgs = M.fromList
             (read  "2021-03-27 23:51:44.856755 UTC")
             (read  "2021-03-27 23:51:44.856755 UTC")
             (S.fromList ["top-rated", "popular", "price-low"])
-            S.empty)
+            (S.fromList ["w"])
+          )
           ]
 
 
@@ -191,7 +198,7 @@ backend = Backend
             ApiRoute_Packages :/ packagesR -> case packagesR of
               PackagesRoute_Get :/ w -> do
                 pkgs <- fromMaybe M.empty <$> select @(M.Map Text PackageModel) w
-                writeLBS $ encode (pkgs, either (const False) (const True) eUser)
+                writeLBS $ encode (pkgs, either (const Nothing) Just eUser)
               PackagesRoute_Search :/ sp -> do
                 pkgs <- maybe M.empty unPrefixed <$> select @(Prefixed (M.Map Text PackageModel)) sp
                 writeLBS $ encode pkgs

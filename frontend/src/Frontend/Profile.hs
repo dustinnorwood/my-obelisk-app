@@ -65,7 +65,7 @@ profile usernameDyn = do
 
           let rDyn = constDyn rdef
           mPkgsE <- Client.backendGET $ (\r -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Get :/ r) <$> rDyn
-          pkgsDyn <- holdDyn (M.empty, False) $ fromMaybe (M.empty, False) <$> mPkgsE
+          pkgsDyn <- holdDyn (M.empty, Nothing) $ fromMaybe (M.empty, Nothing) <$> mPkgsE
           packagesPreview pkgsDyn
   where
     navItem sr rDyn = elClass "li" "nav-item" . routeLinkDynClass

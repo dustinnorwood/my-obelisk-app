@@ -1,4 +1,11 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase, MultiParamTypeClasses, OverloadedStrings, RecursiveDo, PatternSynonyms, TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 module Frontend.PackagePreview where
 
 
@@ -37,7 +44,7 @@ packagesPreview
      , MonadSample t m
      , Prerender js t m
      )
-  => Dynamic t (Map Text PackageModel, Bool)
+  => Dynamic t (Map Text PackageModel, Maybe Text)
   -> m ()
 packagesPreview artMapDyn = dyn_ $ loaded <$> artMapDyn
   where
@@ -72,20 +79,28 @@ packagePreview
      , MonadSample t m
      , Prerender js t m
      )
-  => Dynamic t (Text, PackageModel, Bool) -> m ()
-packagePreview packageUserDyn = elClass "div" "package-preview col-md-3" $ do
+  => Dynamic t (Text, PackageModel, Maybe Text) -> m ()
+packagePreview packageUserDyn' = elClass "div" "package-preview col-md-3" $ do
   elClass "div" "package-meta" $ mdo
-    let packageDyn = (\(s,p,_) -> (s,p)) <$> packageUserDyn
-    packageD <- fmap join $ foldDyn (\pm d -> fmap (\(s,_) -> (s,pm)) d) packageDyn packageE
+    packageUserDyn <- fmap join $ foldDyn (\pm d -> fmap (\(s,_,mt) -> (s,pm,mt)) d) packageUserDyn' packageE
+    let packageD = (\(s,pm,_) -> (s,pm)) <$> packageUserDyn
+        didIAlreadyFavoriteIt = do
+          (_, PackageModel{..}, mUser) <- packageUserDyn
+          pure $ ffor mUser $ \t -> t `S.member` packageModelFavorited
+        bClass = ffor didIAlreadyFavoriteIt $ \case
+          Nothing -> "disabled "
+          Just True -> "selected "
+          Just False -> ""
     packageImage "" $ packageModelImage . snd <$> packageD
-    let dAttrs = (\(_,_,b) -> ("class" =: ((if b then "" else "disabled ") <> "btn btn-outline-primary btn-sm pull-xs-right"))) <$> packageUserDyn
+    let dAttrs = (\b -> ("class" =: (b <> "btn btn-outline-primary btn-sm pull-xs-right"))) <$> bClass
     (r,_) <- elDynAttr' "button" dAttrs $ do
       elClass "i" "ion-heart" blank
       text " "
       dynText $ T.pack . show . S.size . packageModelFavorited . snd <$> packageD
-      pure ()
-    let favoriteE = tag (fst <$> current packageDyn) $ domEvent Click r
-    let urlE = (\s -> BackendRoute_Api :/ ApiRoute_Package :/ (DocumentSlug s, Just (PackageRoute_Favorite :/ ()))) <$> favoriteE
+    let favoriteE = tag ((,) <$> (fst <$> current packageD) <*> (current didIAlreadyFavoriteIt)) $ domEvent Click r
+    let urlE = ffor favoriteE $ \(s, b) -> case b of
+          Just True -> BackendRoute_Api :/ ApiRoute_Package :/ (DocumentSlug s, Just (PackageRoute_Unfavorite :/ ()))
+          _ -> BackendRoute_Api :/ ApiRoute_Package :/ (DocumentSlug s, Just (PackageRoute_Favorite :/ ()))
     mPackageE <- Client.backendPostEvent ((,()) <$> urlE)
     let packageE = fmapMaybe id mPackageE
     routeLinkDynClass (constDyn "preview-link")
@@ -93,7 +108,6 @@ packagePreview packageUserDyn = elClass "div" "package-preview col-md-3" $ do
       $ do
         el "h3" $ dynText $ packageModelTitle . snd <$> packageD
     el "p" $ dynText $ (<>"...") . T.unwords . take 10 . T.words . packageModelDescription . snd <$> packageD
-    pure ()
   pure ()
 
 profileRoute

@@ -4,6 +4,7 @@ module Frontend.Nav where
 
 import Reflex.Dom.Core
 
+import Control.Lens
 import           Control.Monad.Fix      (MonadFix)
 import Data.Bool              (bool)
 import Data.Functor           (void)
@@ -98,8 +99,9 @@ searchWidget = do
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Search term..." <> "style" =: "border-radius: 0;")
       & inputElementConfig_setValue .~ clearEv
-    let search = (Windowed Nothing Nothing . SearchPackagesParams) <$> value ti
-    searchResultsE <- backendGET $ (\term -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Search :/ term) <$> search
+    let srch = ffor (value ti) $ \t -> rdef & item . search .~ t
+                                            & limit ?~ 5
+    searchResultsE <- backendGET $ (\term -> BackendRoute_Api :/ ApiRoute_Packages :/ PackagesRoute_Search :/ term) <$> srch
     searchResults <- holdDyn M.empty (fromMaybe M.empty <$> searchResultsE)
     clickedDyn <- divClass "ui compact menu search__dropdown" $ do
       divClass "ui simple dropdown item" $ mdo
